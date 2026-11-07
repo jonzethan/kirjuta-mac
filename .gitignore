@@ -1,0 +1,9 @@
+models
+diar-models
+testaudio
+.build/
+build/
+build-mac/
+*.app
+*.wav
+.DS_Store
