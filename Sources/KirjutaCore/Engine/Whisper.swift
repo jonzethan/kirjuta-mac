@@ -26,17 +26,27 @@ public final class WhisperEngine: @unchecked Sendable {
 
     public var isLoaded: Bool { lock.withLock { ctx != nil } }
 
+    /// Laeb mudeli ja teeb ühe tühja läbimise (Metali soojendus), et ka esimene lause tuleks kiiresti.
     @discardableResult
     public func load(path: String) -> Bool {
-        lock.lock(); defer { lock.unlock() }
-        if ctx != nil && modelPath == path { return true }
+        lock.lock()
+        if ctx != nil && modelPath == path { lock.unlock(); return true }
         if let c = ctx { kw_free(c); ctx = nil; modelPath = nil }
         kw_quiet_logs(true)
         let t0 = Date()
         ctx = kw_init(path, true)
         if ctx != nil { modelPath = path }
-        AppLog.i("Engine", "model \((path as NSString).lastPathComponent) loaded=\(ctx != nil) in \(Int(Date().timeIntervalSince(t0) * 1000)) ms")
-        return ctx != nil
+        let ok = ctx != nil
+        lock.unlock()
+        let loadMs = Int(Date().timeIntervalSince(t0) * 1000)
+        if ok {
+            let t1 = Date()
+            _ = transcribeImpl([Float](repeating: 0, count: 16000), lang: "et", accurate: false, log: false)
+            AppLog.i("Engine", "model \((path as NSString).lastPathComponent) loaded in \(loadMs) ms, warmup \(Int(Date().timeIntervalSince(t1) * 1000)) ms")
+        } else {
+            AppLog.i("Engine", "model \((path as NSString).lastPathComponent) FAILED to load")
+        }
+        return ok
     }
 
     /// Vabasta kontekst (kohustuslik enne protsessi lõppu, muidu ggml-metal assert exit()-is).
@@ -53,8 +63,8 @@ public final class WhisperEngine: @unchecked Sendable {
     }
 
     /// Reaalaja-režiim: lühike aken, greedy.
-    public func transcribe(_ samples: [Float], lang: String) -> [Piece] {
-        transcribeImpl(samples, lang: lang, accurate: false).pieces
+    public func transcribe(_ samples: [Float], lang: String, log: Bool = true) -> [Piece] {
+        transcribeImpl(samples, lang: lang, accurate: false, log: log).pieces
     }
 
     /// Täpne režiim: ainult üks kodeerija käivitus; kutsuja jätkab järgmist akent kohast Window.endMs.
@@ -62,7 +72,7 @@ public final class WhisperEngine: @unchecked Sendable {
         transcribeImpl(samples, lang: lang, accurate: true)
     }
 
-    private func transcribeImpl(_ samples: [Float], lang: String, accurate: Bool) -> Window {
+    private func transcribeImpl(_ samples: [Float], lang: String, accurate: Bool, log: Bool = true) -> Window {
         lock.lock(); defer { lock.unlock() }
         guard let ctx else { return Window(pieces: [], endMs: 0) }
         let seconds = Double(samples.count) / 16000.0
@@ -98,9 +108,9 @@ public final class WhisperEngine: @unchecked Sendable {
             pieces.append(Piece(t0: Int64(p[0]) ?? 0, t1: Int64(p[1]) ?? 0, text: text))
         }
         let ms = Date().timeIntervalSince(t0) * 1000
-        AppLog.i("Engine", String(format: "chunk %.1f s ctx=%d beam=%d lang=%@ took %d ms rtf=%.2f%@%@",
+        if log { AppLog.i("Engine", String(format: "chunk %.1f s ctx=%d beam=%d lang=%@ took %d ms rtf=%.2f%@%@",
                                   seconds, actx, beam, lang, Int(ms), ms / 1000 / max(seconds, 0.001),
-                                  accurate ? String(format: " end=%.1f", Double(endMs) / 1000) : "", cleaned ? " cleaned" : ""))
+                                  accurate ? String(format: " end=%.1f", Double(endMs) / 1000) : "", cleaned ? " cleaned" : "")) }
         return Window(pieces: pieces, endMs: endMs)
     }
 

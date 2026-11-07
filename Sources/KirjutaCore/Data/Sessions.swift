@@ -85,6 +85,84 @@ public enum Sessions {
         (try? String(contentsOf: dir.appendingPathComponent("title"), encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    public static func setTitle(_ dir: URL, _ t: String) { write(dir.appendingPathComponent("title"), t) }
+    public static func isPinned(_ dir: URL) -> Bool { FileManager.default.fileExists(atPath: dir.appendingPathComponent("pinned").path) }
+    public static func setPinned(_ dir: URL, _ on: Bool) {
+        let f = dir.appendingPathComponent("pinned")
+        if on { write(f, "1") } else { try? FileManager.default.removeItem(at: f) }
+    }
+    public static func isRefined(_ dir: URL) -> Bool {
+        FileManager.default.fileExists(atPath: dir.appendingPathComponent("segments.live.tsv").path) || title(dir) != nil
+    }
+    /// TÄPSUSTA: reaalajas tehtud tekst jääb varuks (segments.live.tsv), uus tekst kirjutatakse nullist.
+    public static func archiveLiveSegments(_ dir: URL) {
+        let fm = FileManager.default
+        let cur = segFile(dir), live = dir.appendingPathComponent("segments.live.tsv")
+        if !fm.fileExists(atPath: live.path) && fm.fileExists(atPath: cur.path) { try? fm.moveItem(at: cur, to: live) }
+        else { try? fm.removeItem(at: cur) }
+    }
+
+    // --- prügikast (kustuta + võta tagasi); tühjendatakse äpi järgmisel käivitusel ---
+    static var trash: URL {
+        let t = root.appendingPathComponent(".trash")
+        try? FileManager.default.createDirectory(at: t, withIntermediateDirectories: true)
+        return t
+    }
+    public static func moveToTrash(_ dir: URL) -> URL {
+        let dest = trash.appendingPathComponent(dir.lastPathComponent)
+        try? FileManager.default.removeItem(at: dest)
+        try? FileManager.default.moveItem(at: dir, to: dest)
+        return dest
+    }
+    public static func restore(_ trashed: URL) {
+        try? FileManager.default.moveItem(at: trashed, to: root.appendingPathComponent(trashed.lastPathComponent))
+    }
+    public static func emptyTrash() { try? FileManager.default.removeItem(at: trash) }
+
+    /// Nimekirja rida.
+    public struct Info: Hashable, Sendable {
+        public let dir: URL
+        public let startedAt: Date
+        public let durationMs: Int64
+        public let preview: String
+        public let lang: String
+        public let title: String?
+        public let refined: Bool
+        public let pinned: Bool
+        public let speakers: [Int]
+    }
+
+    public static func info(_ dir: URL) -> Info {
+        WavWriter.repair(audio(dir))
+        let segs = loadSegments(dir)
+        let date = startedAt(dir) ?? ((try? dir.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? Date())
+        var spk: [Int] = []
+        for s in segs where s.speaker >= 0 && !spk.contains(s.speaker) { spk.append(s.speaker) }
+        return Info(dir: dir, startedAt: date, durationMs: durationMs(dir),
+                    preview: String(segs.map(\.text).joined(separator: " ").prefix(160)), lang: lang(dir),
+                    title: title(dir), refined: isRefined(dir), pinned: isPinned(dir), speakers: spk.sorted())
+    }
+
+    /// 16 kHz mono 16-bit WAV -> näidised (otsib "data" tüki).
+    public static func readWav(_ url: URL) -> [Int16] {
+        guard let d = try? Data(contentsOf: url, options: .mappedIfSafe), d.count > 12 else { return [] }
+        var off = 12
+        while off + 8 <= d.count {
+            let id = String(decoding: d[off..<(off + 4)], as: UTF8.self)
+            let len = Int(d[(off + 4)..<(off + 8)].withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) }.littleEndian)
+            if id == "data" {
+                let end = min(d.count, off + 8 + (len == 0 ? d.count : len))
+                let start = off + 8
+                let n = (end - start) / 2
+                var out = [Int16](repeating: 0, count: n)
+                _ = out.withUnsafeMutableBytes { d.copyBytes(to: $0, from: start..<(start + n * 2)) }
+                return out
+            }
+            off += 8 + len + (len & 1)
+        }
+        return []
+    }
+
     /// Kõnelejate nimed: "0=Mina" ridadena.
     public static func speakerNames(_ dir: URL) -> [Int: String] {
         guard let s = try? String(contentsOf: dir.appendingPathComponent("speakers.txt"), encoding: .utf8) else { return [:] }

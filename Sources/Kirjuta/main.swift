@@ -1,11 +1,13 @@
 import Foundation
 import KirjutaCore
 
-// `Kirjuta --selftest fail.wav [et|en] [q8_0]`: sama toru mis mikrofonil (Chunker -> whisper -> TextCleaner),
-// aga heli tuleb failist. Ilma aknata, kontrolliks.
 let args = CommandLine.arguments
 if let i = args.firstIndex(of: "--selftest"), i + 1 < args.count {
-    exit(SelfTest.run(file: args[i + 1], lang: args.count > i + 2 ? args[i + 2] : "et",
-                      model: args.count > i + 3 ? args[i + 3] : Settings.model))
+    let rest = Array(args[(i + 2)...]).filter { !$0.hasPrefix("-") }
+    exit(SelfTest.run(file: args[i + 1], lang: rest.first ?? "et", model: rest.count > 1 ? rest[1] : Settings.model,
+                      realtime: args.contains("--realtime")))
+}
+if let i = args.firstIndex(of: "--import"), i + 1 < args.count {
+    exit(SelfTest.importTest(file: args[i + 1], lang: args.count > i + 2 && !args[i + 2].hasPrefix("-") ? args[i + 2] : "et"))
 }
 KirjutaApp.main()

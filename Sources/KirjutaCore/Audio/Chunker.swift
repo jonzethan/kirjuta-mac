@@ -70,6 +70,13 @@ public final class Chunker {
         return Float(min(max(r / 6000.0, 0), 1))
     }
 
+    /// Pooleliolev kõne (veel lõikamata tükk) jooksva teksti jaoks; nil = pole piisavalt kõnet.
+    public func pending() -> Chunk? {
+        // paus juba algas -> lõplik tükk on kohe tulemas, ära koorma whisperit
+        guard speechFrames * 30 >= 700, len > 0, silenceRun * 30 < 210 else { return nil }
+        return Chunk(startMs: startSample * 1000 / Int64(sampleRate), samples: Array(buf[0..<len]), source: source)
+    }
+
     public func flush() {
         if speechFrames * 30 >= 500 { cut(frames) }
         len = 0
