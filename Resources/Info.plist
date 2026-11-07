@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key><string>ee.kirjuta.mac</string>
+  <key>CFBundleName</key><string>Kirjuta</string>
+  <key>CFBundleDisplayName</key><string>Kirjuta</string>
+  <key>CFBundleExecutable</key><string>Kirjuta</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>0.2</string>
+  <key>CFBundleVersion</key><string>2</string>
+  <key>LSMinimumSystemVersion</key><string>14.2</string>
+  <key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSMicrophoneUsageDescription</key><string>Kirjuta kirjutab sinu kõne üles (Mina). Kõik toimub selles arvutis, internetti ei kasutata.</string>
+  <key>NSAudioCaptureUsageDescription</key><string>Kirjuta kirjutab üles arvutist kostva heli, nt Teamsi vestluskaaslase (Nemad). Kõik toimub selles arvutis.</string>
+</dict>
+</plist>
