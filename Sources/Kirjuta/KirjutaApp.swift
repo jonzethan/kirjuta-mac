@@ -100,7 +100,13 @@ struct GeneralSettings: View {
             }
             Toggle("Täpsusta automaatselt pärast salvestamist", isOn: Binding(
                 get: { Settings.autoRefine }, set: { Settings.autoRefine = $0; m.objectWillChange.send() }))
-            LabeledContent("Mudelite kaust", value: Settings.modelsDir)
+            LabeledContent("Mudelite kaust") {
+                Button(Settings.modelsDir) {
+                    try? FileManager.default.createDirectory(atPath: Settings.modelsDir, withIntermediateDirectories: true)
+                    NSWorkspace.shared.open(URL(fileURLWithPath: Settings.modelsDir))
+                }.buttonStyle(.link)
+            }
+            LabeledContent("Kõnelejate mudelid", value: Diarizer.available ? "olemas ✓" : "puuduvad – kõnelejaid ei eristata")
             LabeledContent("Salvestised") {
                 Button(Sessions.root.path) { NSWorkspace.shared.open(Sessions.root) }.buttonStyle(.link)
             }

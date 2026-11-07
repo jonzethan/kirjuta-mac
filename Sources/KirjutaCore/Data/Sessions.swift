@@ -71,18 +71,23 @@ public enum Settings {
         set { d.set(newValue, forKey: "model") }
     }
     public static var modelsDir: String {
-        get { d.string(forKey: "modelsDir") ?? bundled("models") ?? (NSHomeDirectory() + "/whisper-android/models") }
+        get { d.string(forKey: "modelsDir") ?? bundled("models") ?? firstExisting(userModelsDir, NSHomeDirectory() + "/whisper-android/models") }
         set { d.set(newValue, forKey: "modelsDir") }
     }
     /// Kõnelejate mudelid (pyannote + wespeaker), samad mis Androidis.
     public static var diarDir: String {
-        get { d.string(forKey: "diarDir") ?? bundled("diar") ?? (NSHomeDirectory() + "/whisper-android/third_party/diar") }
+        get { d.string(forKey: "diarDir") ?? bundled("diar") ?? firstExisting(userModelsDir + "/diar", NSHomeDirectory() + "/whisper-android/third_party/diar") }
         set { d.set(newValue, forKey: "diarDir") }
     }
     /// Kõnelejad TÄPSUSTA/impordi juures: -1 = automaatne, 0 = ei erista, 2–5 = täpne arv.
     public static var speakers: Int {
         get { d.object(forKey: "speakers") as? Int ?? -1 }
         set { d.set(newValue, forKey: "speakers") }
+    }
+    /// Kasutaja mudelite kaust (GitHubist alla laaditud äpi jaoks): ~/Kirjuta/models, vt README.md.
+    public static var userModelsDir: String { dataDir.appendingPathComponent("models").path }
+    static func firstExisting(_ paths: String...) -> String {
+        paths.first { FileManager.default.fileExists(atPath: $0) } ?? paths[0]
     }
     /// Äpi sisse pakitud kaust (Kirjuta.app/Contents/Resources/<nimi>), kui see on olemas (dmg-versioon).
     static func bundled(_ name: String) -> String? {
@@ -95,7 +100,12 @@ public enum Settings {
         ["q8_0", "f16", "q5_0"].filter { FileManager.default.fileExists(atPath: modelPath($0)) }
     }
     public static func modelPath(_ name: String = model) -> String {
-        modelsDir + "/taltech-et-turbo-\(name).bin"
+        let p = modelsDir + "/taltech-et-turbo-\(name).bin"
+        // Hugging Face'ist otse alla laaditud f16 fail kannab nime ggml-model.bin
+        if name == "f16", !FileManager.default.fileExists(atPath: p), FileManager.default.fileExists(atPath: modelsDir + "/ggml-model.bin") {
+            return modelsDir + "/ggml-model.bin"
+        }
+        return p
     }
     /// Kõik andmed: ~/Kirjuta (sessions/, kirjuta.log)
     public static var dataDir: URL {

@@ -82,6 +82,13 @@ final class AppModel: ObservableObject {
     // MARK: mudel
 
     func loadModel() {
+        // valitud mudelit pole (nt alla laaditud ainult f16): võta olemasolev
+        let avail = Settings.availableModels
+        if !avail.contains(model), let first = avail.first { model = first; return } // didSet laeb
+        guard !avail.isEmpty else {
+            modelState = .failed("Keelemudelit pole. Pane TalTechi mudel kausta \(Settings.userModelsDir) (vt README GitHubis)")
+            return
+        }
         modelState = .loading
         let path = Settings.modelPath(model)
         Task.detached {

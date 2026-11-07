@@ -10,6 +10,8 @@ PAIGALDAMINE
    isetehtud sertifikaadiga, mitte Apple'i omaga. Kui „Ava“ nuppu pole: Süsteemiseaded →
    Privaatsus ja turvalisus → kerige alla → „Ava ikkagi“.)
 3. Luba mikrofon, kui macOS küsib.
+4. Kui see versioon on ILMA MUDELITETA: lae mudelid alla ja pane kausta ~/Kirjuta/models
+   (lingid ja juhend: https://github.com/jonzethan/kirjuta-mac#mudelid). Siis taaskäivita Kirjuta.
 
 KASUTAMINE
 - ⌘R – salvesta koosolek / kõne. Tekst tuleb ekraanile jooksvalt; pärast lõpetamist
