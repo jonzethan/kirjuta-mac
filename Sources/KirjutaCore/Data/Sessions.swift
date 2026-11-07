@@ -71,18 +71,28 @@ public enum Settings {
         set { d.set(newValue, forKey: "model") }
     }
     public static var modelsDir: String {
-        get { d.string(forKey: "modelsDir") ?? (NSHomeDirectory() + "/whisper-android/models") }
+        get { d.string(forKey: "modelsDir") ?? bundled("models") ?? (NSHomeDirectory() + "/whisper-android/models") }
         set { d.set(newValue, forKey: "modelsDir") }
     }
     /// Kõnelejate mudelid (pyannote + wespeaker), samad mis Androidis.
     public static var diarDir: String {
-        get { d.string(forKey: "diarDir") ?? (NSHomeDirectory() + "/whisper-android/third_party/diar") }
+        get { d.string(forKey: "diarDir") ?? bundled("diar") ?? (NSHomeDirectory() + "/whisper-android/third_party/diar") }
         set { d.set(newValue, forKey: "diarDir") }
     }
     /// Kõnelejad TÄPSUSTA/impordi juures: -1 = automaatne, 0 = ei erista, 2–5 = täpne arv.
     public static var speakers: Int {
         get { d.object(forKey: "speakers") as? Int ?? -1 }
         set { d.set(newValue, forKey: "speakers") }
+    }
+    /// Äpi sisse pakitud kaust (Kirjuta.app/Contents/Resources/<nimi>), kui see on olemas (dmg-versioon).
+    static func bundled(_ name: String) -> String? {
+        guard let r = Bundle.main.resourceURL?.appendingPathComponent(name).path,
+              FileManager.default.fileExists(atPath: r) else { return nil }
+        return r
+    }
+    /// Mudelid, mis on päriselt olemas (seadete valikusse).
+    public static var availableModels: [String] {
+        ["q8_0", "f16", "q5_0"].filter { FileManager.default.fileExists(atPath: modelPath($0)) }
     }
     public static func modelPath(_ name: String = model) -> String {
         modelsDir + "/taltech-et-turbo-\(name).bin"

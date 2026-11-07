@@ -1,0 +1,26 @@
+KIRJUTA – eesti ja inglise kõne tekstiks, täiesti võrguühenduseta
+==================================================================
+
+Nõuded: Apple Silicon Mac (M1, M2, M3, M4 …), macOS 14.2 või uuem, vähemalt 8 GB mälu.
+
+PAIGALDAMINE
+1. Lohista „Kirjuta“ kausta „Applications“.
+2. Ava Applications kaustas Kirjuta: PAREMKLÕPS → Ava → Ava.
+   (Esimesel korral ütleb macOS, et arendajat ei saa kontrollida – äpp on allkirjastatud
+   isetehtud sertifikaadiga, mitte Apple'i omaga. Kui „Ava“ nuppu pole: Süsteemiseaded →
+   Privaatsus ja turvalisus → kerige alla → „Ava ikkagi“.)
+3. Luba mikrofon, kui macOS küsib.
+
+KASUTAMINE
+- ⌘R – salvesta koosolek / kõne. Tekst tuleb ekraanile jooksvalt; pärast lõpetamist
+  kirjutatakse kõik täpsemalt üle ja kõnelejad eristatakse.
+- Lohista helifail aknasse – kirjutab faili üles.
+- ⌥Space (Option + tühik) – dikteeri suvalisse tekstilahtrisse (Messenger, Word, brauser …).
+  Ütle lause, siis eraldi „saada“ → sõnum läheb teele (Enter). „lõpeta“ → dikteerimine lõpeb.
+  Esimesel korral: Süsteemiseaded → Privaatsus ja turvalisus → Hõlbustus → lülita „Kirjuta“ sisse.
+- Menüüribal on Kirjuta ikoon (ring ja täpp); seaded: ⌘,
+
+Salvestised on kaustas ~/Kirjuta/sessions. Midagi ei saadeta internetti.
+
+Keelemudel: TalTechi whisper-large-v3-turbo-et-verbatim (https://huggingface.co/TalTechNLP).
+Kõnelejad: pyannote segmentation 3.0 + WeSpeaker (sherpa-onnx).

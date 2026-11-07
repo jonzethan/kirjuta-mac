@@ -84,10 +84,10 @@ struct GeneralSettings: View {
     var body: some View {
         Form {
             Picker("Mudel", selection: $m.model) {
-                Text("q8_0 – soovitatud (874 MB, kvaliteet = f16)").tag("q8_0")
-                Text("f16 – originaal (1,6 GB)").tag("f16")
-                Text("q5_0 – väiksem (574 MB)").tag("q5_0")
-            }.disabled(m.busy || m.job != nil)
+                let labels = ["q8_0": "q8_0 – soovitatud (874 MB, kvaliteet = f16)", "f16": "f16 – originaal (1,6 GB)",
+                              "q5_0": "q5_0 – väiksem (574 MB)"]
+                ForEach(Settings.availableModels, id: \.self) { Text(labels[$0] ?? $0).tag($0) }
+            }.disabled(m.busy || m.job != nil || Settings.availableModels.count < 2)
             Picker("Keel", selection: $m.lang) {
                 Text("Automaatne (eesti / inglise)").tag("auto")
                 Text("Ainult eesti").tag("et")
