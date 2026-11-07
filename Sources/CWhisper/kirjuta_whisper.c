@@ -34,9 +34,10 @@ struct token_budget {
 // Kordamise piir: kui tokeneid on eelarvest rohkem, luba ainult teksti lõpp (EOT).
 static void budget_filter(struct whisper_context *ctx, struct whisper_state *state,
                           const whisper_token_data *tokens, int n_tokens, float *logits, void *user_data) {
-    (void) state; (void) tokens; (void) n_tokens;
+    (void) state; (void) tokens;
     struct token_budget *b = (struct token_budget *) user_data;
-    if (++b->calls <= b->budget) return;
+    // n_tokens = selle dekoodri (beam'i) seni dekodeeritud tokenid
+    if (n_tokens < b->budget) return;
     const int eot = whisper_token_eot(ctx);
     const int nv = whisper_n_vocab(ctx);
     for (int i = 0; i < nv; i++) if (i != eot) logits[i] = -INFINITY;
@@ -111,7 +112,7 @@ void kw_free_str(char *s) { free(s); }
 const char *kw_system_info(void) { return whisper_print_system_info(); }
 
 char *kw_transcribe(void *vk, const float *samples, int n_samples, int threads, int audio_ctx,
-                    const char *lang, int beam, bool single_pass, int max_tokens) {
+                    const char *lang, int beam, bool single_pass, int max_tokens, const char *prompt, float no_speech_thold) {
     struct kw_ctx *k = (struct kw_ctx *) vk;
     if (!k) return NULL;
     struct whisper_context *ctx = k->ctx;
@@ -134,6 +135,8 @@ char *kw_transcribe(void *vk, const float *samples, int n_samples, int threads, 
     p.print_special = false;
     p.suppress_blank = true;
     p.audio_ctx = audio_ctx;
+    if (prompt && *prompt) p.initial_prompt = prompt;
+    if (no_speech_thold > 0) p.no_speech_thold = no_speech_thold; // > 1 = akent ei visata kunagi "vaikuseks"
     int encodes = 0;
     if (single_pass) {
         p.encoder_begin_callback = only_first_encode;

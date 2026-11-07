@@ -39,3 +39,32 @@ saba jaoks teise akna, vt RAPORT 3.2 p 6), üks kodeerija käivitus ≈ **1,6 s*
 - f16, q8_0, q5_0, q4_0 andsid greedy-ga sama teksti; beam-iga erinesid ainult viimase poolelijäänud lause sabas.
 - **Kinnitus RAPORT 3.2 p 2:** `-nt` (ajatemplid väljas) andis kõigil mudelitel kordusi ja prügi („globaid, tere“, „Arvo Loodame …“).
 - Vaikus/lühike müra (`c_c.wav`, `c_d.wav` täisaknaga) → „Aitäh.“ – TextCleaner peab selle ära viskama.
+
+## Täpsuse katsed päris salvestistega (2026-11-07)
+
+Andmed: 5,5 min telefonikõne (Maci sisseehitatud mikrofon, teine pool telefoni kõlarist) ja 40 s ingliskeelne
+YouTube kõlaritest. Tööriist: `Kirjuta --bench fail lang rt|win|vad …` (vt `Sources/Kirjuta/Bench.swift`).
+Võrdlus: f16 + beam 5 VAD-rühmadega (pole päris tõde, ainult suunanäitaja) + teksti lugemine.
+
+**Peamine leid: Maci mikrofoni heli on väga vaikne.** Kõne RMS oli ~40–200 (Android ~500+), aga Chunkeri
+absoluutne kõnelävi oli 120. Seega peeti suur osa kõnest vaikuseks: laused lõigati pooleks ja jooksvat teksti
+peaaegu ei tekkinud (pending() nõuab kõnet). Lävi Macis 40 (suhteline lävi müratase × 1,8 jääb).
+
+| Reaalaeg (kõne) | tükke | WER vs viide | RTF |
+|---|---|---|---|
+| Android: paus 420 ms, 1,5–12 s, lävi 120 | 78 | 41,6 % | 0,18 |
+| + beam 2 | 78 | 44,8 % | 0,18 |
+| + täis audio_ctx | 78 | 41,1 % | 0,46 |
+| + eelmine tekst promptiks | 78 | 48,1 % (jättis lõike vahele) | 0,17 |
+| paus 800 ms, 3–15 s, lävi 40 (**uus**) | 44 | 36,5 % | 0,12 |
+
+Pikem tükk = rohkem konteksti = täpsem; ooteaja katab jooksev (hall) tekst. YouTube: „twelve-wheel battery“ →
+„twelve-volt battery“, „farm and safety“ → „fireman safety“.
+
+**TÄPSUSTA:** pimesi 30 s aknad jätsid kõnes vahele (104–131 s kadus täiesti: vaikusega algav aken visati
+whisperi no_speech-reegliga ära; üks 29 s lõik „Nii, mis sa täna veel?“ hüppas üle 28 s kõnest; aken algas keset
+sõna → „The kind of HTTP. TheORTveis.“). Uus: VAD-kõnelõigud rühmitatakse ≤15 s akendeks (>3 s vaikus = uus
+rühm), no_speech-reegel väljas, hõreda tulemuse korral lõigud ükshaaval. Puuduvad lõigud 5/64 → 0/64,
+WER vs viide 43 % → 36 %, RTF ~0,2 (koos keeletuvastusega).
+
+Tokenite eelarve loeb nüüd iga beam'i tokeneid eraldi (varem loendati filtri kutseid → beam 2 korral pool eelarvet).

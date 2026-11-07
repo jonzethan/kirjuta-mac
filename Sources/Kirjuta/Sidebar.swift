@@ -74,7 +74,7 @@ struct RecorderDeck: View {
                 .help("Näita käimasolevat salvestist")
             }
             RecordButton(recording: m.recording,
-                         enabled: m.recording || (!m.finishing && m.job == nil && m.modelState == .ready)) {
+                         enabled: m.recording || m.canRecord) {
                 m.toggleRecording()
             }
             .padding(.top, 16)
@@ -96,7 +96,7 @@ struct RecorderDeck: View {
         }
         if m.recording { return "⌘R lõpetab" }
         if m.finishing { return "kirjutan viimast lõiku…" }
-        if m.job != nil { return "oota, fail on töös" }
+        if let j = m.job { return j.cancellable ? "⌘R alustab (täpsustamine katkeb)" : "oota, fail on töös" }
         let lang = m.lang == "auto" ? "keel automaatne" : (m.lang == "en" ? "ainult inglise" : "ainult eesti")
         return "uus salvestis · ⌘R · \(lang)"
     }

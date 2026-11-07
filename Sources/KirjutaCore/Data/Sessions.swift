@@ -23,6 +23,11 @@ public enum Settings {
         get { d.string(forKey: "langMode") ?? "auto" }   // auto | et | en
         set { d.set(newValue, forKey: "langMode") }
     }
+    /// Pärast salvestamist kirjuta kogu salvestis automaatselt täpses režiimis üle (TÄPSUSTA).
+    public static var autoRefine: Bool {
+        get { d.object(forKey: "autoRefine") as? Bool ?? true }
+        set { d.set(newValue, forKey: "autoRefine") }
+    }
     /// f16 | q8_0 | q5_0
     public static var model: String {
         get { d.string(forKey: "model") ?? "q8_0" }
@@ -100,6 +105,15 @@ public enum Sessions {
         let cur = segFile(dir), live = dir.appendingPathComponent("segments.live.tsv")
         if !fm.fileExists(atPath: live.path) && fm.fileExists(atPath: cur.path) { try? fm.moveItem(at: cur, to: live) }
         else { try? fm.removeItem(at: cur) }
+    }
+
+    /// Katkestatud TÄPSUSTA: reaalaja-tekst tagasi.
+    public static func restoreLiveSegments(_ dir: URL) {
+        let fm = FileManager.default
+        let cur = segFile(dir), live = dir.appendingPathComponent("segments.live.tsv")
+        guard fm.fileExists(atPath: live.path) else { return }
+        try? fm.removeItem(at: cur)
+        try? fm.moveItem(at: live, to: cur)
     }
 
     // --- prügikast (kustuta + võta tagasi); tühjendatakse äpi järgmisel käivitusel ---

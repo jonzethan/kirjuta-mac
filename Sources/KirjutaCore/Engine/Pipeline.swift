@@ -123,7 +123,9 @@ public final class StreamPipeline {
         self.source = source
         self.worker = worker
         writer = try WavWriter(url: wavURL)
-        chunker = Chunker(source: source) { worker.submit($0) }
+        // Pikemad tükid kui Androidis (paus 0,8 s, 3–15 s): rohkem konteksti = täpsem tekst (TULEMUSED-MAC.md);
+        // ooteaja katab jooksev tekst.
+        chunker = Chunker(source: source, minMs: 3000, pauseMs: 800, maxMs: 15000) { worker.submit($0) }
     }
 
     public var elapsedMs: Int64 { totalSamples * 1000 / Int64(sampleRate) }
@@ -145,7 +147,11 @@ public final class StreamPipeline {
         // jooksev tekst ~1 s tagant, kui lõplikud tükid ei oota
         if interimEnabled, totalSamples - lastInterim >= Int64(sampleRate) {
             lastInterim = totalSamples
-            if !worker.isBusyWithFinals, let p = chunker.pending() { worker.submitInterim(p) }
+            let busy = worker.isBusyWithFinals, p = chunker.pending()
+            if ProcessInfo.processInfo.environment["KIRJUTA_DEBUG"] != nil {
+                AppLog.i("Dbg", "tick \(elapsedMs) busy=\(busy) pending=\(p.map { "\($0.startMs)+\($0.durationMs)" } ?? "nil") \(chunker.debugState)")
+            }
+            if !busy, let p { worker.submitInterim(p) }
         }
     }
 

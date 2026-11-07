@@ -9,6 +9,15 @@ struct JobState: Equatable {
     let title: String
     var phase: String
     var progress: Double // < 0 = määramata
+    var cancellable = false // TÄPSUSTA: uus salvestus katkestab selle (reaalaja-tekst jääb alles)
+}
+
+/// Lõimekindel katkestuslipp taustatööle.
+final class CancelFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var v = false
+    var isSet: Bool { lock.withLock { v } }
+    func set() { lock.withLock { v = true } }
 }
 
 @MainActor
@@ -38,6 +47,9 @@ final class AppModel: ObservableObject {
 
     // muu
     @Published var job: JobState?
+    private var jobCancel: CancelFlag?
+    /// Kas salvestamist saab alustada (TÄPSUSTA katkestatakse vajadusel).
+    var canRecord: Bool { !finishing && modelState == .ready && (job == nil || job!.cancellable) }
     @Published var error: String?
     @Published var toast: String?
     @Published var modelState: ModelState = .loading
@@ -120,7 +132,8 @@ final class AppModel: ObservableObject {
 
     func start() async {
         error = nil
-        guard job == nil else { error = "Faili kirjutamine käib – oota, kuni see lõpeb"; return }
+        if let j = job, j.cancellable { jobCancel?.set() } // TÄPSUSTA katkeb, salvestus läheb kohe käima
+        else if job != nil { error = "Faili kirjutamine käib – oota, kuni see lõpeb"; return }
         guard modelState == .ready else { error = "Mudel pole veel laaditud"; return }
         guard await MicCapture.requestPermission() else {
             error = "Mikrofoni luba puudub: Süsteemiseaded → Privaatsus ja turvalisus → Mikrofon → lülita „Kirjuta“ sisse"
@@ -204,6 +217,8 @@ final class AppModel: ObservableObject {
         AppLog.i("Rec", "stop \(liveDir?.lastPathComponent ?? "") \(formatClock(elapsedMs))")
         refreshSessions()
         loadSelected()
+        // täpne ülekirjutus kohe taustal (Macis ~10x kiirem kui reaalaeg)
+        if Settings.autoRefine, let dir = liveDir, elapsedMs >= 3000, job == nil { refine(dir) }
     }
 
     /// Äpp sulgub salvestamise ajal: pane WAV korralikult kinni.
@@ -253,10 +268,16 @@ final class AppModel: ObservableObject {
 
     func refineSelected() {
         guard let dir = selected, canRunJob(), dir != liveDir || !busy else { return }
-        job = JobState(dir: dir, title: Export.displayTitle(dir), phase: Jobs.Phase.transcribe.rawValue, progress: 0)
+        refine(dir)
+    }
+
+    private func refine(_ dir: URL) {
+        job = JobState(dir: dir, title: Export.displayTitle(dir), phase: "TÄPSUSTAN", progress: 0, cancellable: true)
+        let cancel = CancelFlag()
+        jobCancel = cancel
         AppLog.i("Job", "refine \(dir.lastPathComponent)")
         Task.detached {
-            Jobs.refine(dir, lang: Settings.lang) { p in
+            Jobs.refine(dir, lang: Settings.lang, cancelled: { cancel.isSet }) { p in
                 DispatchQueue.main.async {
                     self.job?.progress = p
                     if self.selected == dir { self.loadSelected() }
@@ -276,8 +297,9 @@ final class AppModel: ObservableObject {
 
     private func jobDone(select dir: URL?) {
         job = nil
+        jobCancel = nil
         refreshSessions()
-        if let dir { selected = dir }
+        if let dir, !busy { selected = dir }
         loadSelected()
     }
 

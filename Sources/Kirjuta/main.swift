@@ -10,4 +10,7 @@ if let i = args.firstIndex(of: "--selftest"), i + 1 < args.count {
 if let i = args.firstIndex(of: "--import"), i + 1 < args.count {
     exit(SelfTest.importTest(file: args[i + 1], lang: args.count > i + 2 && !args[i + 2].hasPrefix("-") ? args[i + 2] : "auto"))
 }
+if let i = args.firstIndex(of: "--bench") {
+    exit(Bench.run(Array(args[(i + 1)...])))
+}
 KirjutaApp.main()

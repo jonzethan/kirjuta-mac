@@ -31,7 +31,7 @@ struct KirjutaApp: App {
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button(model.recording ? "Lõpeta salvestamine" : "Alusta salvestamist") { model.toggleRecording() }
-                    .keyboardShortcut("r").disabled(model.finishing || model.job != nil)
+                    .keyboardShortcut("r").disabled(!model.recording && !model.canRecord)
                 Button("Ava helifail…") { model.pickAudioFile() }
                     .keyboardShortcut("o").disabled(model.busy || model.job != nil)
             }
@@ -77,6 +77,8 @@ struct SettingsView: View {
                 Text("Ainult eesti").tag("et")
                 Text("Ainult inglise").tag("en")
             }.disabled(m.busy)
+            Toggle("Täpsusta automaatselt pärast salvestamist", isOn: Binding(
+                get: { Settings.autoRefine }, set: { Settings.autoRefine = $0; m.objectWillChange.send() }))
             LabeledContent("Mudelite kaust", value: Settings.modelsDir)
             LabeledContent("Salvestised") {
                 Button(Sessions.root.path) { NSWorkspace.shared.open(Sessions.root) }.buttonStyle(.link)

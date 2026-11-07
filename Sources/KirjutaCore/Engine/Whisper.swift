@@ -72,27 +72,55 @@ public final class WhisperEngine: @unchecked Sendable {
         transcribeImpl(samples, lang: lang, accurate: true)
     }
 
+    /// Dekodeerimise seaded (katsetamiseks ja eri režiimideks).
+    public struct Options: Sendable {
+        public var audioCtx: Int32? = nil     // nil = heli pikkuse järgi
+        public var beam: Int32 = 1
+        public var singlePass = false
+        public var maxTokens: Int32? = nil    // nil = heli pikkuse järgi (reaalaeg), 0 = piiramata
+        public var prompt: String? = nil
+        public var noSpeechThold: Float = 0   // 0 = whisper.cpp vaikimisi (0.6)
+        public init(audioCtx: Int32? = nil, beam: Int32 = 1, singlePass: Bool = false, maxTokens: Int32? = nil,
+                    prompt: String? = nil, noSpeechThold: Float = 0) {
+            self.audioCtx = audioCtx; self.beam = beam; self.singlePass = singlePass
+            self.maxTokens = maxTokens; self.prompt = prompt; self.noSpeechThold = noSpeechThold
+        }
+    }
+
+    public func transcribe(_ samples: [Float], lang: String, options o: Options, log: Bool = true) -> Window {
+        run(samples, lang: lang, o, log: log)
+    }
+
     private func transcribeImpl(_ samples: [Float], lang: String, accurate: Bool, log: Bool = true) -> Window {
+        let seconds = Double(samples.count) / 16000.0
+        var o = Options()
+        if accurate {
+            o.beam = 2; o.singlePass = true; o.maxTokens = 0
+            if seconds >= 20 { o.audioCtx = 0 } else {
+                let c = max(768, Int(seconds * 50 + 400)); o.audioCtx = c >= 1500 ? 0 : Int32(c)
+            }
+        }
+        return run(samples, lang: lang, o, log: log)
+    }
+
+    private func run(_ samples: [Float], lang: String, _ o: Options, log: Bool) -> Window {
         lock.lock(); defer { lock.unlock() }
         guard let ctx else { return Window(pieces: [], endMs: 0) }
         let seconds = Double(samples.count) / 16000.0
-        let actx: Int32
-        if accurate {
-            if seconds >= 20 { actx = 0 } else {
-                let c = max(768, Int(seconds * 50 + 400)); actx = c >= 1500 ? 0 : Int32(c)
-            }
-        } else {
-            actx = Self.audioCtx(forSeconds: seconds)
-        }
-        let beam: Int32 = accurate ? 2 : 1
+        let actx = o.audioCtx ?? Self.audioCtx(forSeconds: seconds)
+        let beam = o.beam
+        let accurate = o.singlePass
         // reaalajas: tokenite eelarve heli pikkuse järgi (kordamise korral ei jää mudel ~20 s kinni)
-        let maxTokens: Int32 = accurate ? 0 : Int32(seconds * 10 + 30)
+        let maxTokens: Int32 = o.maxTokens ?? Int32(seconds * 10 + 30)
         let t0 = Date()
         let raw: String = samples.withUnsafeBufferPointer { buf in
             lang.withCString { l in
-                guard let out = kw_transcribe(ctx, buf.baseAddress, Int32(buf.count), Int32(Self.threads), actx, l, beam, accurate, maxTokens) else { return "" }
-                defer { kw_free_str(out) }
-                return String(decoding: UnsafeRawBufferPointer(start: out, count: strlen(out)), as: UTF8.self)
+                (o.prompt ?? "").withCString { pr in
+                    guard let out = kw_transcribe(ctx, buf.baseAddress, Int32(buf.count), Int32(Self.threads), actx, l, beam,
+                                                  o.singlePass, maxTokens, pr, o.noSpeechThold) else { return "" }
+                    defer { kw_free_str(out) }
+                    return String(decoding: UnsafeRawBufferPointer(start: out, count: strlen(out)), as: UTF8.self)
+                }
             }
         }
         var pieces: [Piece] = []

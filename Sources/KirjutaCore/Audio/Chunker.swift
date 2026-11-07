@@ -18,11 +18,14 @@ public struct Chunk: Sendable {
 /// - tükk ≥ MAX_MS -> lõika vaikseima koha pealt viimase 3 s sees
 /// - ainult vaikus -> visatakse ära (ei koorma mudelit)
 public final class Chunker {
-    static let minMs = 1500, pauseMs = 420, maxMs = 12000, prerollMs = 300
+    static let prerollMs = 300
+    public let minMs: Int, pauseMs: Int, maxMs: Int
+    /// Absoluutne kõne alampiir (RMS). Android 120; Macis 40, sest Maci sisseehitatud mikrofon on palju vaiksem (kõne ~40–200).
+    public let minRms: Double
 
     private let emit: (Chunk) -> Void
     private let source: Int
-    private let capacity = sampleRate * (maxMs / 1000 + 2)
+    private let capacity: Int
     private var buf: [Int16]
     private var len = 0
     private var rms: [Float]
@@ -33,9 +36,12 @@ public final class Chunker {
     private var silenceRun = 0 // kaadrites
     private var speechFrames = 0
 
-    public init(source: Int, emit: @escaping (Chunk) -> Void) {
+    /// Vaikimisi väärtused = Androidi Chunker (1500 / 420 / 12000 ms).
+    public init(source: Int, minMs: Int = 1500, pauseMs: Int = 420, maxMs: Int = 12000, minRms: Double = 40, emit: @escaping (Chunk) -> Void) {
         self.source = source
         self.emit = emit
+        self.minMs = minMs; self.pauseMs = pauseMs; self.maxMs = maxMs; self.minRms = minRms
+        capacity = sampleRate * (maxMs / 1000 + 2)
         buf = [Int16](repeating: 0, count: capacity)
         rms = [Float](repeating: 0, count: capacity / frameSize + 1)
         isSpeech = [Bool](repeating: false, count: capacity / frameSize + 1)
@@ -49,7 +55,7 @@ public final class Chunker {
         let r = (sum / Double(frameSize)).squareRoot()
         if noiseFloor < 0 { noiseFloor = r }
         noiseFloor = r < noiseFloor ? noiseFloor * 0.9 + r * 0.1 : noiseFloor + (r - noiseFloor) * 0.002
-        let speech = r > max(noiseFloor * 1.8, 120.0)
+        let speech = r > max(noiseFloor * 1.8, minRms)
 
         let f = frames
         buf.replaceSubrange(len..<(len + frameSize), with: frame)
@@ -61,19 +67,21 @@ public final class Chunker {
         let lenMs = frames * 30
         if speechFrames == 0 && lenMs >= 2000 {
             dropSilence()
-        } else if lenMs >= Self.minMs && silenceRun * 30 >= Self.pauseMs && speechFrames * 30 >= 500 {
+        } else if lenMs >= minMs && silenceRun * 30 >= pauseMs && speechFrames * 30 >= 500 {
             let keep = max(silenceRun - 8, 0) // jäta ~240 ms vaikust tüki lõppu
             cut(frames - keep)
-        } else if lenMs >= Self.maxMs {
+        } else if lenMs >= maxMs {
             cut(quietestFrame(frames - 3000 / 30, frames))
         }
         return Float(min(max(r / 6000.0, 0), 1))
     }
 
     /// Pooleliolev kõne (veel lõikamata tükk) jooksva teksti jaoks; nil = pole piisavalt kõnet.
+    public var debugState: String { "len=\(len / frameSize * 30) speech=\(speechFrames * 30) sil=\(silenceRun * 30) start=\(startSample / 16)" }
+
     public func pending() -> Chunk? {
-        // paus juba algas -> lõplik tükk on kohe tulemas, ära koorma whisperit
-        guard speechFrames * 30 >= 700, len > 0, silenceRun * 30 < 210 else { return nil }
+        // paus on peaaegu piisavalt pikk -> lõplik tükk on kohe tulemas, ära koorma whisperit
+        guard speechFrames * 30 >= 700, len > 0, silenceRun * 30 < max(210, pauseMs - 400) else { return nil }
         return Chunk(startMs: startSample * 1000 / Int64(sampleRate), samples: Array(buf[0..<len]), source: source)
     }
 

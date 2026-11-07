@@ -15,7 +15,7 @@ void kw_free(void *ctx);
 /// beam > 1 = beam search; single_pass = lubab ainult ühe kodeerija käivituse (TÄPSUSTA).
 /// max_tokens > 0: kogu tüki tokenite eelarve (kordamise piir) – pärast seda sunnitakse tekst lõppema.
 char *kw_transcribe(void *ctx, const float *samples, int n_samples, int threads, int audio_ctx,
-                    const char *lang, int beam, bool single_pass, int max_tokens);
+                    const char *lang, int beam, bool single_pass, int max_tokens, const char *prompt, float no_speech_thold);
 
 /// Keeletuvastus ainult eesti ja inglise vahel (eraldi whisperi olek, lühike 12,8 s kodeerija aken).
 /// Kirjutab tõenäosused p_et, p_en (kogu keelte jaotusest). 0 = OK.
