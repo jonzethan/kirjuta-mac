@@ -73,19 +73,21 @@ public final class DictationEngine: @unchecked Sendable {
             peak = max(peak, chunker.feed(buffer[off..<(off + frameSize)]))
             off += frameSize
             samplesIn += Int64(frameSize)
-            if chunker.lastFrameSpeech {
-                lastSpeechSample = samplesIn
-                if sentAtSample != nil { sentAtSample = nil } // räägib edasi: uus sõnum
-            }
         }
         if off > 0 { buffer.removeFirst(off) }
         let level = peak
         DispatchQueue.main.async { self.onLevel(level) }
 
         let sr = Int64(sampleRate)
-        if lock.withLock({ let r = sendRequested; sendRequested = false; return r }) { sentAtSample = samplesIn }
-        // pärast saatmist: postSendSec vaikust -> lõpp
-        if let sent = sentAtSample, samplesIn - sent > Int64(cfg.postSendSec * Double(sr)) {
+        // Taimerid nullib ainult päriselt tuvastatud tekst (mitte müra, mida energia-VAD peab kõneks).
+        let (sent, text) = lock.withLock { () -> (Bool, Bool) in
+            let r = (sendRequested, textSeen); sendRequested = false; textSeen = false; return r
+        }
+        if text { lastSpeechSample = samplesIn; sentAtSample = nil } // räägib edasi: uus sõnum
+        if lock.withLock({ let r = forceCut; forceCut = false; return r }) { chunker.flush() }
+        if sent { sentAtSample = samplesIn }
+        // pärast saatmist: postSendSec jooksul pole uut teksti -> lõpp
+        if let s = sentAtSample, samplesIn - s > Int64(cfg.postSendSec * Double(sr)) {
             finish(.afterSend); return
         }
         if samplesIn - lastSpeechSample > Int64(cfg.silenceSec * Double(sr)) && !hasWork {
@@ -139,6 +141,12 @@ public final class DictationEngine: @unchecked Sendable {
             let text = WhisperEngine.shared.transcribe(c.floats(), lang: tracker.current, log: false).map(\.text).joined(separator: " ")
             if lock.withLock({ !pendingFinals.isEmpty }) { return } // vahepeal lõigati – vana tulemus
             interim = text
+            if text.contains(where: { $0.isLetter }) { lock.withLock { textSeen = true } }
+            // võlusõna jooksvas tekstis kaks korda järjest (~1,2 s): lõika kohe, ära oota pausi
+            // (taustamüra korral ei pruugi energia-VAD pausi üldse leida)
+            let magicNow = endsWithMagic(text)
+            if magicNow && lastInterimMagic { lock.withLock { forceCut = true } }
+            lastInterimMagic = magicNow
             publish()
             DispatchQueue.main.async { self.onState(.writing) }
         }
@@ -161,6 +169,7 @@ public final class DictationEngine: @unchecked Sendable {
             if isMagic(t2) { pieces = other; text = t2 }
         }
         AppLog.i("Dict", String(format: "lause %.1f s [%@]: %@", secs, l, text))
+        lastInterimMagic = false
         interim = ""
         guard text.contains(where: { $0.isLetter || $0.isNumber }) else { publish(); return }
 
@@ -173,6 +182,7 @@ public final class DictationEngine: @unchecked Sendable {
             text = pieces.dropLast().map(\.text).joined(separator: " ").trimmingCharacters(in: .whitespaces)
         }
         if !text.isEmpty {
+            lock.withLock { textSeen = true }
             finals.append(text)
             let seg = Segment(startMs: c.startMs, endMs: c.endMs, text: text, speaker: 0)
             DispatchQueue.main.async { self.onFinal(seg) }
@@ -203,6 +213,9 @@ public final class DictationEngine: @unchecked Sendable {
         lock.withLock { sendRequested = true }
     }
     private var sendRequested = false
+    private var forceCut = false
+    private var lastInterimMagic = false // ainult work-järjekorras
+    private var textSeen = false
 
     /// Kõik lõplikud laused + jooksev tekst. Lause vahel: kui eelmine ei lõppenud märgiga, pane punkt.
     private func publish() {
@@ -217,6 +230,13 @@ public final class DictationEngine: @unchecked Sendable {
             out += p
         }
         DispatchQueue.main.async { self.onText(out) }
+    }
+
+    /// Kas tekst lõpeb võlusõnaga (kogu tekst või viimane lause).
+    func endsWithMagic(_ text: String) -> Bool {
+        if isMagic(text) { return true }
+        let sentences = text.split(whereSeparator: { ".!?".contains($0) }).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        return sentences.count >= 2 && isMagic(sentences.last!)
     }
 
     /// Võlusõna, lubatud üks täheviga (5+ tähte): „saada“ ≈ „saata“, „sada“; „send it“ ≈ „sent it“.
