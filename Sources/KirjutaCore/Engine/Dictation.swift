@@ -149,32 +149,53 @@ public final class DictationEngine: @unchecked Sendable {
         lock.withLock { finalBusy = true }
         defer { lock.withLock { finalBusy = false } }
         let f = c.floats()
-        let l = tracker.resolve(f)
+        let secs = Double(f.count) / Double(sampleRate)
+        // lühike tükk (nt ainult „saada“): keeletuvastus on ebakindel -> kasuta senist keelt
+        let l = secs < 2 ? tracker.current : tracker.resolve(f)
+        var pieces = decode(f, lang: l)
+        var text = pieces.map(\.text).joined(separator: " ").trimmingCharacters(in: .whitespaces)
+        if secs < 2.5, tracker.mode == "auto", !isMagic(text) {
+            // võlusõna teises keeles („send it“ eesti keele režiimis jne)
+            let other = decode(f, lang: l == "et" ? "en" : "et")
+            let t2 = other.map(\.text).joined(separator: " ")
+            if isMagic(t2) { pieces = other; text = t2 }
+        }
+        AppLog.i("Dict", String(format: "lause %.1f s [%@]: %@", secs, l, text))
+        interim = ""
+        guard text.contains(where: { $0.isLetter || $0.isNumber }) else { publish(); return }
+
+        // võlusõna: kogu lause või viimane (pausiga eraldatud) whisperi lõik
+        var send = false
+        if isMagic(text) {
+            send = true; text = ""
+        } else if pieces.count >= 2, isMagic(pieces.last!.text) {
+            send = true
+            text = pieces.dropLast().map(\.text).joined(separator: " ").trimmingCharacters(in: .whitespaces)
+        }
+        if !text.isEmpty {
+            finals.append(text)
+            let seg = Segment(startMs: c.startMs, endMs: c.endMs, text: text, speaker: 0)
+            DispatchQueue.main.async { self.onFinal(seg) }
+        }
+        if send && !finals.isEmpty {
+            publish() // lahtris on täpselt sõnum (võlusõna kustutatud)
+            finals = []
+            AppLog.i("Dict", "saada")
+            DispatchQueue.main.async { self.onSend(); self.onState(.sent) }
+            markSent()
+            return
+        }
+        publish()
+        if !finals.isEmpty { DispatchQueue.main.async { self.onState(.awaitingSend) } }
+    }
+
+    private func decode(_ f: [Float], lang: String) -> [Piece] {
         let secs = Double(f.count) / Double(sampleRate)
         // täpsem kui jooksev tekst: suurem aken + varuvariant korduste korral
         var o = WhisperEngine.Options(beam: 1, maxTokens: Int32(secs * 12 + 40))
         let ctx = max(768, Int(secs * 50 + 400)); o.audioCtx = ctx >= 1500 ? 0 : Int32(ctx)
         o.tempInc = 0.2
-        let text = WhisperEngine.shared.transcribe(f, lang: l, options: o, log: false).pieces.map(\.text)
-            .joined(separator: " ").trimmingCharacters(in: .whitespaces)
-        interim = ""
-        guard text.contains(where: { $0.isLetter || $0.isNumber }) else { publish(); return }
-
-        if isMagic(text) {
-            if !finals.isEmpty {
-                publish() // võlusõna (jooksev tekst) lahtrist välja
-                finals = []
-                DispatchQueue.main.async { self.onSend(); self.onState(.sent) }
-                markSent()
-            } else {
-                publish()
-            }
-            return
-        }
-        finals.append(text)
-        let seg = Segment(startMs: c.startMs, endMs: c.endMs, text: text, speaker: 0)
-        publish()
-        DispatchQueue.main.async { self.onFinal(seg); self.onState(.awaitingSend) }
+        return WhisperEngine.shared.transcribe(f, lang: lang, options: o, log: false).pieces
     }
 
     private func markSent() {
@@ -198,9 +219,28 @@ public final class DictationEngine: @unchecked Sendable {
         DispatchQueue.main.async { self.onText(out) }
     }
 
+    /// Võlusõna, lubatud üks täheviga (5+ tähte): „saada“ ≈ „saata“, „sada“; „send it“ ≈ „sent it“.
     func isMagic(_ text: String) -> Bool {
         let n = Self.norm(text)
-        return cfg.magicWords.contains { Self.norm($0) == n }
+        guard !n.isEmpty else { return false }
+        return cfg.magicWords.contains { w in
+            let m = Self.norm(w)
+            return m == n || (m.count >= 5 && Self.distance(m, n) <= 1) || n == m + " " + m
+        }
+    }
+
+    static func distance(_ a: String, _ b: String) -> Int {
+        let x = Array(a), y = Array(b)
+        if abs(x.count - y.count) > 1 { return 2 }
+        var d = Array(0...y.count)
+        for i in 1...max(1, x.count) where !x.isEmpty {
+            var prev = d; d[0] = i
+            for j in stride(from: 1, through: y.count, by: 1) {
+                d[j] = min(prev[j] + 1, d[j - 1] + 1, prev[j - 1] + (x[i - 1] == y[j - 1] ? 0 : 1))
+            }
+            prev = d
+        }
+        return d[y.count]
     }
 
     static func norm(_ s: String) -> String {
