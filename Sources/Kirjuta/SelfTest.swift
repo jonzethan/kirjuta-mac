@@ -67,4 +67,34 @@ enum SelfTest {
             print("Viga: \(error)"); WhisperEngine.shared.unload(); return 1
         }
     }
+
+    /// Dikteerimise test: fail mängitakse reaalajas sisse, väljund = lahtri sisu muutused, saatmised, lõpp.
+    static func dictate(file: String) -> Int32 {
+        AppLog.echo = true
+        guard loadModel(Settings.model) else { return 1 }
+        let samples = try! AudioDecoder.decode(URL(fileURLWithPath: file))
+        let eng = DictationEngine(config: .init(magicWords: ["saada", "send it"], silenceSec: 30, postSendSec: 3, lang: "auto"))
+        let t0 = Date()
+        func stamp() -> String { String(format: "%5.1fs", Date().timeIntervalSince(t0)) }
+        var field = ""
+        var done = false
+        eng.onText = { t in if t != field { print("\(stamp()) LAHTER: \(t)"); field = t } }
+        eng.onSend = { print("\(stamp()) ⏎ SAADA"); field = "" }
+        eng.onState = { print("\(stamp())   [\($0)]") }
+        eng.onStop = { print("\(stamp()) STOP \($0)"); done = true }
+        let q = DispatchQueue(label: "feed")
+        q.async {
+            var off = 0
+            while off < samples.count && !done {
+                let n = min(1600, samples.count - off)
+                eng.feed(Array(samples[off..<(off + n)])); off += n
+                usleep(100_000)
+            }
+            // fail sai otsa: vaikus edasi, kuni mootor ise lõpetab
+            while !done { eng.feed([Float](repeating: 0, count: 1600)); usleep(100_000) }
+        }
+        while !done { RunLoop.main.run(until: Date().addingTimeInterval(0.1)) }
+        WhisperEngine.shared.unload()
+        return 0
+    }
 }

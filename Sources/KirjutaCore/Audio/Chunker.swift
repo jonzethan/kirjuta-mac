@@ -22,6 +22,8 @@ public final class Chunker {
     public let minMs: Int, pauseMs: Int, maxMs: Int
     /// Absoluutne kõne alampiir (RMS). Android 120; Macis 40, sest Maci sisseehitatud mikrofon on palju vaiksem (kõne ~40–200).
     public let minRms: Double
+    /// Vähim kõne hulk tükis (Android 500 ms). Dikteerimisel väiksem, et „saada“ tuleks eraldi lausena.
+    public var minSpeechMs = 500
 
     private let emit: (Chunk) -> Void
     private let source: Int
@@ -63,11 +65,12 @@ public final class Chunker {
         rms[f] = Float(r)
         isSpeech[f] = speech
         if speech { speechFrames += 1; silenceRun = 0 } else { silenceRun += 1 }
+        lastFrameSpeech = speech
 
         let lenMs = frames * 30
         if speechFrames == 0 && lenMs >= 2000 {
             dropSilence()
-        } else if lenMs >= minMs && silenceRun * 30 >= pauseMs && speechFrames * 30 >= 500 {
+        } else if lenMs >= minMs && silenceRun * 30 >= pauseMs && speechFrames * 30 >= minSpeechMs {
             let keep = max(silenceRun - 8, 0) // jäta ~240 ms vaikust tüki lõppu
             cut(frames - keep)
         } else if lenMs >= maxMs {
@@ -77,6 +80,9 @@ public final class Chunker {
     }
 
     /// Pooleliolev kõne (veel lõikamata tükk) jooksva teksti jaoks; nil = pole piisavalt kõnet.
+    /// Kas viimane kaader oli kõne (dikteerimise vaikuse-taimerite jaoks).
+    public private(set) var lastFrameSpeech = false
+
     public var debugState: String { "len=\(len / frameSize * 30) speech=\(speechFrames * 30) sil=\(silenceRun * 30) start=\(startSample / 16)" }
 
     public func pending() -> Chunk? {
@@ -86,7 +92,7 @@ public final class Chunker {
     }
 
     public func flush() {
-        if speechFrames * 30 >= 500 { cut(frames) }
+        if speechFrames * 30 >= minSpeechMs { cut(frames) }
         len = 0
     }
 

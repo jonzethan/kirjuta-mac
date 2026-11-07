@@ -65,7 +65,15 @@ final class AppModel: ObservableObject {
     var busy: Bool { recording || finishing }
     var isLiveSelected: Bool { selected != nil && selected == liveDir && busy }
 
+    let dictation = DictationController()
+
+    /// Dikteerimine algab: käimasolev TÄPSUSTA katkeb (salvestis jääb reaalaja-tekstiga, saab hiljem uuesti).
+    func cancelRefineIfRunning() {
+        if let j = job, j.cancellable { jobCancel?.set() }
+    }
+
     init() {
+        dictation.app = self
         Sessions.emptyTrash()
         refreshSessions()
         loadModel()
@@ -132,6 +140,7 @@ final class AppModel: ObservableObject {
 
     func start() async {
         error = nil
+        guard !dictation.active else { error = "Dikteerimine käib – lõpeta see enne (\(Settings.dictKeyLabel))"; return }
         if let j = job, j.cancellable { jobCancel?.set() } // TÄPSUSTA katkeb, salvestus läheb kohe käima
         else if job != nil { error = "Faili kirjutamine käib – oota, kuni see lõpeb"; return }
         guard modelState == .ready else { error = "Mudel pole veel laaditud"; return }

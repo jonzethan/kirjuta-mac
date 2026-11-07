@@ -9,6 +9,7 @@ rm -rf $APP
 mkdir -p $APP/Contents/MacOS $APP/Contents/Resources
 cp .build/release/Kirjuta $APP/Contents/MacOS/
 cp Resources/Info.plist $APP/Contents/
+cp Resources/AppIcon.icns $APP/Contents/Resources/
 ID="${KIRJUTA_SIGN_ID:-Kirjuta Dev}"
 if security find-certificate -c "$ID" >/dev/null 2>&1; then
   codesign --force --sign "$ID" --identifier ee.kirjuta.mac $APP

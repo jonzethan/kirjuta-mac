@@ -28,6 +28,38 @@ public enum Settings {
         get { d.object(forKey: "autoRefine") as? Bool ?? true }
         set { d.set(newValue, forKey: "autoRefine") }
     }
+    // --- dikteerimine ---
+    /// Kiirklahv: virtuaalne klahvikood + Carboni modifikaatorid (vaikimisi ⌥Space: 49 + optionKey 0x800).
+    public static var dictKeyCode: Int {
+        get { d.object(forKey: "dictKeyCode") as? Int ?? 49 }
+        set { d.set(newValue, forKey: "dictKeyCode") }
+    }
+    public static var dictModifiers: Int {
+        get { d.object(forKey: "dictModifiers") as? Int ?? 0x800 }
+        set { d.set(newValue, forKey: "dictModifiers") }
+    }
+    public static var dictKeyLabel: String {
+        get { d.string(forKey: "dictKeyLabel") ?? "⌥Space" }
+        set { d.set(newValue, forKey: "dictKeyLabel") }
+    }
+    /// Võlusõnad komadega eraldatult.
+    public static var magicWords: String {
+        get { d.string(forKey: "magicWords") ?? "saada, send it" }
+        set { d.set(newValue, forKey: "magicWords") }
+    }
+    public static var dictSilenceSec: Double {
+        get { d.object(forKey: "dictSilenceSec") as? Double ?? 30 }
+        set { d.set(newValue, forKey: "dictSilenceSec") }
+    }
+    public static var dictPostSendSec: Double {
+        get { d.object(forKey: "dictPostSendSec") as? Double ?? 3 }
+        set { d.set(newValue, forKey: "dictPostSendSec") }
+    }
+    /// Kas dikteerimised salvestatakse ka salvestiste nimekirja.
+    public static var saveDictations: Bool {
+        get { d.object(forKey: "saveDictations") as? Bool ?? false }
+        set { d.set(newValue, forKey: "saveDictations") }
+    }
     /// f16 | q8_0 | q5_0
     public static var model: String {
         get { d.string(forKey: "model") ?? "q8_0" }
