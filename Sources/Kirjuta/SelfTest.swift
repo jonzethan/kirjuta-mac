@@ -98,3 +98,26 @@ enum SelfTest {
         return 0
     }
 }
+
+extension SelfTest {
+    /// Kontrollib võlu- ja lõpusõnade äratundmist (kasutaja logi näidetega).
+    static func words() -> Int32 {
+        let e = DictationEngine(config: .init(magicWords: ["saada", "send it"], stopWords: ["lõpeta", "stop dictation"],
+                                              silenceSec: 30, postSendSec: 6, lang: "et"))
+        let cases: [(String, Bool, Bool)] = [ // tekst, saada?, lõpeta?
+            ("Saada.", true, false), ("Sada.", true, false), ("Saata!", true, false), ("Send it.", true, false),
+            ("No okei saada seega.", false, false), ("Ma tahan sulle pilti saada.", false, false),
+            ("Lõpeta.", false, true), ("Lõpetaja.", false, true), ("Ah ja lõpetage.", false, true),
+            ("Lõpetan.", false, true), ("Stop dictation.", false, true),
+            ("Me lõpetasime kell üheksa ja läksime koju.", false, false), ("Sajad inimesed.", false, false),
+        ]
+        var bad = 0
+        for (t, send, stop) in cases {
+            let a = e.isMagic(t), b = e.isStop(t)
+            let ok = a == send && b == stop
+            if !ok { bad += 1 }
+            print("\(ok ? "✓" : "✗") \(t)  saada=\(a) lõpeta=\(b)")
+        }
+        return bad == 0 ? 0 : 1
+    }
+}

@@ -251,16 +251,22 @@ public final class DictationEngine: @unchecked Sendable {
         return sentences.count >= 2 && matches(sentences.last!, words)
     }
 
-    func isMagic(_ text: String) -> Bool { matches(text, cfg.magicWords) }
-    func isStop(_ text: String) -> Bool { matches(text, cfg.stopWords) }
+    public func isMagic(_ text: String) -> Bool { matches(text, cfg.magicWords) }
+    public func isStop(_ text: String) -> Bool { matches(text, cfg.stopWords) }
 
-    /// Lubatud üks täheviga (5+ tähte): „saada“ ≈ „saata“, „sada“; „lõpeta“ ≈ „lõpetan“; „send it“ ≈ „sent it“.
+    /// Lubatud üks täheviga (5+ tähte): „saada“ ≈ „saata“, „sada“; „send it“ ≈ „sent it“.
+    /// Ühesõnaline käsk võib olla kuni 3-sõnalise lause viimane sõna ja pöördes („ah ja lõpetage“, „lõpetaja“).
     func matches(_ text: String, _ words: [String]) -> Bool {
         let n = Self.norm(text)
         guard !n.isEmpty else { return false }
+        let tokens = n.split(separator: " ").map(String.init)
         return words.contains { w in
             let m = Self.norm(w)
-            return m == n || (m.count >= 5 && Self.distance(m, n) <= 1) || n == m + " " + m
+            if m == n || (m.count >= 5 && Self.distance(m, n) <= 1) || n == m + " " + m { return true }
+            // ühesõnaline käsk lühikese lause lõpus, ka pöördes: „ah ja lõpetage“, „lõpetaja“, „saadan“
+            guard !m.contains(" "), m.count >= 5, (1...3).contains(tokens.count), let last = tokens.last else { return false }
+            let stem = String(m.dropLast())  // „lõpet“, „saad“
+            return last.hasPrefix(stem) && last.count <= m.count + 2 || Self.distance(m, last) <= 1
         }
     }
 
