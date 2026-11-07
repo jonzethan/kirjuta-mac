@@ -88,3 +88,13 @@ Kõnes oli üks hääl otse Maci mikrofonis ja teine telefoni kõlarist – sama
 Kõneleja kaupa eraldi kirjutamine (iga aken ainult ühe kõneleja kõnega) andis lühikestele vastustele halvema
 teksti („Kümmeacks“, „i--.“), seega kirjutatakse VAD-rühmade kaupa ja iga lause saab kõneleja, kelle hääl sellega
 kõige rohkem kattub (Androidi `Diarizer.assign`).
+
+### Kõnelejad lause kaupa + kiirem TÄPSUSTA (2026-11-07 õhtu)
+
+- Pyannote liitis lühikesed vahelesegamised (02:40 „Ukrainas madistatakse“, 04:21 „Ma tänan…“) naabri pöördega.
+  Uus: iga lause wespeaker-sõrmejälg võrreldakse kõnelejate keskmisega (k-keskmised, 3 kordust, keskmised ≥ 1,5 s
+  lausetest). Mõlemad kasutaja nimetatud kohad parandatud.
+- Keeletuvastus oli 1/3 TÄPSUSTA ajast. Tuvastus esimese 6 s pealt (audio_ctx 300) annab samad otsused
+  (kõne kõik et, YouTube en, mix en/et/et/en) ~2x kiiremini. Rühmad 15 → 20 s.
+- Kõnelejate eristamine (CPU) käib paralleelselt teksti kirjutamisega (GPU).
+- 5,5 min kõne TÄPSUSTA: 106 s → 59 s (RTF 0,18) koos kõnelejatega.

@@ -1,3 +1,4 @@
+import KirjutaCore
 import SwiftUI
 
 /// Sama palett ja tüpograafia mis Androidi äpis (ui/Theme.kt).
@@ -162,6 +163,57 @@ struct Waveform: View {
                 ctx.fill(Path(roundedRect: r, cornerRadius: w / 2), with: .color((active ? K.rec : K.line).opacity(a)))
             }
         }
+    }
+}
+
+/// Ootamise animatsioon: lainetavad ribad (sama keel mis salvestamise lainekuju).
+struct WorkingBars: View {
+    var count = 9
+    var color: Color = K.accent
+    var body: some View {
+        TimelineView(.animation) { tl in
+            let t = tl.date.timeIntervalSinceReferenceDate
+            Canvas { ctx, size in
+                let gap: CGFloat = 4
+                let w = (size.width - gap * CGFloat(count - 1)) / CGFloat(count)
+                for i in 0..<count {
+                    let v = 0.2 + 0.8 * (0.5 + 0.5 * sin(t * 4 - Double(i) * 0.6))
+                    let h = max(size.height * v, 3)
+                    let r = CGRect(x: CGFloat(i) * (w + gap), y: (size.height - h) / 2, width: w, height: h)
+                    ctx.fill(Path(roundedRect: r, cornerRadius: w / 2), with: .color(color.opacity(0.35 + 0.65 * v)))
+                }
+            }
+        }
+    }
+}
+
+/// Kaart teksti kohal, kui fail on töös (TÄPSUSTA / import).
+struct WorkingCard: View {
+    let job: JobState
+    var body: some View {
+        VStack(spacing: 14) {
+            WorkingBars().frame(width: 92, height: 34)
+            Text(title).label(K.text, tracking: 2)
+            if job.progress >= 0 {
+                ProgressLine(progress: job.progress).frame(width: 180)
+                Text("\(Int(job.progress * 100))%").font(K.stamp).foregroundStyle(K.textDim)
+            }
+            Text(hint).font(K.stamp).foregroundStyle(K.textFaint).multilineTextAlignment(.center)
+        }
+        .padding(.horizontal, 32).padding(.vertical, 26)
+        .background(RoundedRectangle(cornerRadius: 16).fill(K.surface))
+        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(K.line))
+        .shadow(color: .black.opacity(0.5), radius: 24, y: 8)
+    }
+    var title: String {
+        switch job.phase {
+        case Jobs.Phase.decode.rawValue: return "TEISENDAN HELI"
+        case Jobs.Phase.speakers.rawValue: return "ERISTAN KÕNELEJAID"
+        default: return job.cancellable ? "TÄPSUSTAN" : "KIRJUTAN"
+        }
+    }
+    var hint: String {
+        job.cancellable ? "parem tekst ja kõnelejad\nuus salvestus (⌘R) katkestab" : "tekst ilmub, kui valmis"
     }
 }
 

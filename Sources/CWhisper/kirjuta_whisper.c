@@ -20,7 +20,7 @@ static void log_cb(enum ggml_log_level level, const char *text, void *user_data)
     fputs(text, stderr);
 }
 
-// Kontekst + eraldi olek keeletuvastuseks (selle exp_n_audio_ctx on 640, et tuvastus oleks kiire).
+// Kontekst + eraldi olek keeletuvastuseks (selle exp_n_audio_ctx on 300 = esimesed 6 s, et tuvastus oleks kiire).
 struct kw_ctx {
     struct whisper_context *ctx;
     struct whisper_state *dstate;
@@ -90,11 +90,12 @@ int kw_detect_et_en(void *vk, const float *samples, int n_samples, int threads, 
         if (!k->dstate) return -2;
         // whisper_full seab oleku kodeerija akna (audio_ctx); tuvastus kasutab seda edaspidi
         struct whisper_full_params p = base_params(threads, "et");
-        p.audio_ctx = 640;
+        p.audio_ctx = 300; // 6 s: sama täpne kui 640/12 s (TULEMUSED-MAC.md), ~2x kiirem
         float zeros[16000] = {0};
         whisper_full_with_state(k->ctx, k->dstate, p, zeros, 16000);
     }
-    const int n = n_samples > 16000 * 12 ? 16000 * 12 : n_samples;
+    const int maxn = 16000 * 6;
+    const int n = n_samples > maxn ? maxn : n_samples;
     if (whisper_pcm_to_mel_with_state(k->ctx, k->dstate, samples, n, threads) != 0) return -3;
     const int nl = whisper_lang_max_id() + 1;
     float *probs = calloc(nl, sizeof(float));

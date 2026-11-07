@@ -76,6 +76,58 @@ public enum Diarizer {
         }
     }
 
+    /// Täpsem määramine lause kaupa: iga lause hääle-„sõrmejälg“ võrreldakse kõnelejate keskmise
+    /// sõrmejäljega (k-keskmised, algus = pööretega kattumine). Pyannote liidab lühikesed vahelesegamised
+    /// („Mille kallal?“) sageli naabri pöördega; lause kaupa võrdlus leiab need üles.
+    public static func assignByVoice(_ segs: [Segment], _ turns: [Turn], samples: [Int16]) -> [Segment] {
+        var out = assign(segs, turns)
+        let speakers = Set(out.map(\.speaker)).sorted()
+        guard speakers.count >= 2, ProcessInfo.processInfo.environment["KIRJUTA_VOICE"] != "0",
+              let e = kd_emb_create(embModel, 4) else { return out }
+        defer { kd_emb_free(e) }
+        let dim = Int(kd_emb_dim(e))
+        let t0 = Date()
+        // sõrmejälg iga lause kohta (vähemalt 1 s heli: lühikese lause ümbrust laiendatakse)
+        var embs: [[Float]?] = out.map { seg in
+            var a = Int(seg.startMs) * 16, b = min(samples.count, Int(seg.endMs) * 16)
+            if b - a < 16000 { let pad = (16000 - (b - a)) / 2; a = max(0, a - pad); b = min(samples.count, b + pad) }
+            guard b - a >= 8000 else { return nil }
+            let f = samples[a..<b].map { Float($0) / 32768 }
+            var v = [Float](repeating: 0, count: dim)
+            let rc = f.withUnsafeBufferPointer { kd_emb_compute(e, $0.baseAddress, Int32($0.count), &v) }
+            guard rc == 0 else { return nil }
+            let n = max(1e-6, sqrt(v.reduce(0) { $0 + $1 * $1 }))
+            return v.map { $0 / n }
+        }
+        func dot(_ x: [Float], _ y: [Float]) -> Float { zip(x, y).reduce(0) { $0 + $1.0 * $1.1 } }
+        for _ in 0..<3 {
+            // keskmised ainult vähemalt 1,5 s lausetest (lühikeste sõrmejälg on mürane)
+            var cent: [Int: [Float]] = [:]
+            for (i, seg) in out.enumerated() where seg.endMs - seg.startMs >= 1500 {
+                guard let v = embs[i] else { continue }
+                let w = Float(min(10_000, seg.endMs - seg.startMs)) / 1000
+                cent[seg.speaker] = zip(cent[seg.speaker] ?? [Float](repeating: 0, count: dim), v).map { $0 + $1 * w }
+            }
+            guard cent.count >= 2 else { break }
+            for (k, v) in cent { let n = max(1e-6, sqrt(v.reduce(0) { $0 + $1 * $1 })); cent[k] = v.map { $0 / n } }
+            var changed = 0
+            out = out.enumerated().map { i, seg in
+                guard let v = embs[i] else { return seg }
+                let best = cent.max { dot(v, $0.value) < dot(v, $1.value) }!.key
+                if best != seg.speaker { changed += 1 }
+                return Segment(startMs: seg.startMs, endMs: seg.endMs, text: seg.text, speaker: best)
+            }
+            if changed == 0 { break }
+        }
+        embs.removeAll()
+        // kõneleja 1 = see, kes räägib esimesena
+        var map: [Int: Int] = [:]
+        for seg in out where map[seg.speaker] == nil { map[seg.speaker] = speakers[map.count] }
+        out = out.map { Segment(startMs: $0.startMs, endMs: $0.endMs, text: $0.text, speaker: map[$0.speaker] ?? $0.speaker) }
+        AppLog.i("Diar", "lausete kaupa üle vaadatud \(out.count) lauset, \(Int(Date().timeIntervalSince(t0) * 1000)) ms")
+        return out
+    }
+
     /// Iga tekstilõik saab kõneleja, kelle hääl selle ajaga kõige rohkem kattub (või lähima).
     public static func assign(_ segs: [Segment], _ turns: [Turn]) -> [Segment] {
         guard !turns.isEmpty else { return segs }

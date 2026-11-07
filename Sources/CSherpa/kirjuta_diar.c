@@ -43,3 +43,37 @@ int32_t kd_process(void *sd, const float *samples, int32_t n, kd_turn **out,
 }
 
 void kd_free_turns(kd_turn *t) { free(t); }
+
+void *kd_emb_create(const char *model, int32_t threads) {
+    SherpaOnnxSpeakerEmbeddingExtractorConfig c;
+    memset(&c, 0, sizeof(c));
+    c.model = model;
+    c.num_threads = threads;
+    c.provider = "cpu";
+    return (void *) SherpaOnnxCreateSpeakerEmbeddingExtractor(&c);
+}
+
+void kd_emb_free(void *e) {
+    if (e) SherpaOnnxDestroySpeakerEmbeddingExtractor((const SherpaOnnxSpeakerEmbeddingExtractor *) e);
+}
+
+int32_t kd_emb_dim(void *e) { return SherpaOnnxSpeakerEmbeddingExtractorDim((const SherpaOnnxSpeakerEmbeddingExtractor *) e); }
+
+int32_t kd_emb_compute(void *ve, const float *samples, int32_t n, float *out) {
+    const SherpaOnnxSpeakerEmbeddingExtractor *e = (const SherpaOnnxSpeakerEmbeddingExtractor *) ve;
+    const SherpaOnnxOnlineStream *s = SherpaOnnxSpeakerEmbeddingExtractorCreateStream(e);
+    if (!s) return -1;
+    SherpaOnnxOnlineStreamAcceptWaveform(s, 16000, samples, n);
+    SherpaOnnxOnlineStreamInputFinished(s);
+    int32_t rc = -2;
+    if (SherpaOnnxSpeakerEmbeddingExtractorIsReady(e, s)) {
+        const float *v = SherpaOnnxSpeakerEmbeddingExtractorComputeEmbedding(e, s);
+        if (v) {
+            memcpy(out, v, sizeof(float) * SherpaOnnxSpeakerEmbeddingExtractorDim(e));
+            SherpaOnnxSpeakerEmbeddingExtractorDestroyEmbedding(v);
+            rc = 0;
+        }
+    }
+    SherpaOnnxDestroyOnlineStream(s);
+    return rc;
+}

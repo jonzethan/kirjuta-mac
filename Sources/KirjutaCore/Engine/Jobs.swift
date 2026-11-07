@@ -1,7 +1,7 @@
 import Foundation
 
 /// Taustatööd (port Androidi FileJobService-ist): helifaili import ja TÄPSUSTA.
-/// Täpne režiim: kõnelõigud (VAD) rühmitatakse kuni 15 s akendeks, beam 2, üks kodeerija käivitus akna kohta.
+/// Täpne režiim: kõnelõigud (VAD) rühmitatakse kuni 20 s akendeks, beam 2, üks kodeerija käivitus akna kohta.
 /// (Pimesi 30 s aknad jätsid katsetes kõnet vahele: vaikusega algav aken visati „vaikuseks“ ja
 /// aken võis alata keset sõna – vt TULEMUSED-MAC.md.)
 public enum Jobs {
@@ -76,30 +76,35 @@ public enum Jobs {
         var all: [Segment] = []
         var diarized = false
         for (samples, speaker) in audios {
-            var turns: [Diarizer.Turn] = []
+            // kõnelejate eristamine (CPU) käib paralleelselt teksti kirjutamisega (GPU)
             let diarize = speakers != Diarizer.off && Diarizer.available && (audios.count == 1 || speaker == Source.system)
+            let diarDone = DispatchSemaphore(value: 0)
+            nonisolated(unsafe) var found: [Diarizer.Turn] = []
             if diarize {
-                let base = Double(doneBefore) / grand, span = Double(samples.count) / grand
-                progress(.speakers, base)
-                let t = Diarizer.run(samples, speakers: speakers) { progress(.speakers, base + $0 * span) }
-                if cancelled() { return false }
-                if Set(t.map(\.speaker)).count >= 2 {
-                    // mitme vooga: Mina = 0, süsteemiheli kõnelejad 1, 2, …
-                    let off = audios.count > 1 ? 1 : 0
-                    turns = t.map { Diarizer.Turn(startMs: $0.startMs, endMs: $0.endMs, speaker: $0.speaker + off) }
-                    diarized = true
+                DispatchQueue.global(qos: .userInitiated).async {
+                    found = Diarizer.run(samples, speakers: speakers)
+                    diarDone.signal()
                 }
-            }
+            } else { diarDone.signal() }
             let segs = accurate(samples, speaker: speaker, lang: lang, cancelled: cancelled,
-                                progress: { progress(.transcribe, (Double(doneBefore) + $0 * Double(samples.count)) / grand) },
-                                emit: { seg in // jooksvalt nähtav
-                                    if audios.count == 1 { Sessions.appendSegment(dir, turns.isEmpty ? seg : Diarizer.assign([seg], turns)[0]) }
-                                })
+                                progress: { progress(.transcribe, (Double(doneBefore) + $0 * Double(samples.count)) / grand) })
+            if cancelled() { return false } // eristamine lõpeb taustal ise, tulemus visatakse ära
+            if diarize && diarDone.wait(timeout: .now() + 0.2) == .timedOut {
+                progress(.speakers, Double(doneBefore + samples.count) / grand)
+                diarDone.wait()
+            }
             if cancelled() { return false }
-            all += Diarizer.assign(segs, turns)
+            var turns: [Diarizer.Turn] = []
+            if Set(found.map(\.speaker)).count >= 2 {
+                // mitme vooga: Mina = 0, süsteemiheli kõnelejad 1, 2, …
+                let off = audios.count > 1 ? 1 : 0
+                turns = found.map { Diarizer.Turn(startMs: $0.startMs, endMs: $0.endMs, speaker: $0.speaker + off) }
+                diarized = true
+            }
+            all += turns.isEmpty ? segs : Diarizer.assignByVoice(segs, turns, samples: samples)
             doneBefore += samples.count
         }
-        if audios.count > 1 { Sessions.saveSegments(dir, all.sorted { $0.startMs < $1.startMs }) }
+        Sessions.saveSegments(dir, all.sorted { $0.startMs < $1.startMs })
         if diarized && audios.count == 1 && Sessions.speakerNames(dir) == [Source.mic: "Mina"] {
             Sessions.setSpeakerNames(dir, [:]) // mikrofonis on mitu inimest: „Kõneleja 1“, „Kõneleja 2“ …
         }
@@ -124,7 +129,7 @@ public enum Jobs {
     /// Kui mudel jättis rühma lõpu kirjutamata, tehakse ülejäänud lõigud uue rühmana.
     /// Kui tulemus on kahtlaselt hõre (mudel hüppas kõnest üle), kirjutatakse lõigud ükshaaval.
     public static func accurate(_ s: [Int16], speaker: Int, lang: LangTracker,
-                                groupSec: Double = 15, beam: Int32 = 2, cancelled: () -> Bool = { false }, progress: (Double) -> Void = { _ in }, emit: (Segment) -> Void = { _ in }) -> [Segment] {
+                                groupSec: Double = 20, beam: Int32 = 2, cancelled: () -> Bool = { false }, progress: (Double) -> Void = { _ in }, emit: (Segment) -> Void = { _ in }) -> [Segment] {
         let regions: [(Int, Int, Int)] = speechRegions(s).map { ($0.0, $0.1, speaker) }
         let maxLen = Int(groupSec * Double(sampleRate))
         let maxGap = 3 * sampleRate

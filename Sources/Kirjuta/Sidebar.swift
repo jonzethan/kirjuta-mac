@@ -235,7 +235,7 @@ struct SessionRow: View {
 
     var previewText: String {
         if isLive { return m.liveSegments.last?.text ?? "salvestab…" }
-        if m.job?.dir == info.dir && info.preview.isEmpty { return "kirjutan…" }
+        if m.job?.dir == info.dir && info.preview.isEmpty { return "töös…" }
         return info.preview.isEmpty ? "(tekst puudub)" : info.preview
     }
 }

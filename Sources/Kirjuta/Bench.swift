@@ -51,6 +51,17 @@ enum Bench {
         case "vad":
             let segs = Jobs.accurate(ints, speaker: 0, lang: tracker, groupSec: Double(int(0, 28)), beam: Int32(int(1, 2)))
             out = segs.map { ($0.startMs, $0.endMs, $0.text) }
+        case "lang":
+            // keeletuvastus iga ~15 s kõnerühma kohta: "en-osakaal"
+            var line = ""
+            var a = 0
+            while a < ints.count {
+                let b = min(ints.count, a + 15 * 16000)
+                let f = ints[a..<b].map { Float($0) / 32768 }
+                if let p = WhisperEngine.shared.detect(f) { line += String(format: "%.2f ", p.en / max(p.et + p.en, 1e-6)) }
+                a = b
+            }
+            err(line)
         case "diar":
             let turns = Diarizer.run(ints, speakers: int(0, -1))
             out = turns.map { ($0.startMs, $0.endMs, "S\($0.speaker)") }

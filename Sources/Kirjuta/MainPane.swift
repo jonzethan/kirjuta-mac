@@ -195,20 +195,13 @@ struct DetailView: View {
                 Button { m.delete(dir) } label: { Image(systemName: "trash").foregroundStyle(K.textDim) }
                     .buttonStyle(.plain).help("Kustuta (saab tagasi võtta)").disabled(job != nil).padding(.leading, 10)
             }
-            if let job {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(job.phase + (job.progress >= 0 ? " · \(Int(job.progress * 100))%" : "…")).label(K.accent)
-                    ProgressLine(progress: job.progress)
-                }
-                .padding(.horizontal, 18).padding(.vertical, 10)
-                HLine()
-            }
+            if let job { ProgressLine(progress: job.progress) }
 
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        if segs.isEmpty {
-                            Text(job != nil ? "kirjutan…" : "(teksti ei tuvastatud)").font(K.body).foregroundStyle(K.textFaint)
+                        if segs.isEmpty && job == nil {
+                            Text("(teksti ei tuvastatud)").font(K.body).foregroundStyle(K.textFaint)
                                 .frame(maxWidth: .infinity).padding(.top, 60)
                         }
                         ForEach(Array(segs.enumerated()), id: \.offset) { i, s in
@@ -223,6 +216,12 @@ struct DetailView: View {
                     }
                     .padding(.horizontal, 18).padding(.vertical, 12)
                 }
+                // töö ajal: vana tekst tuhmilt taustal, ooteanimatsioon peal; valmis tekst tuleb korraga
+                .opacity(job != nil ? 0.18 : 1)
+                .blur(radius: job != nil ? 1.5 : 0)
+                .allowsHitTesting(job == nil)
+                .overlay { if let job { WorkingCard(job: job).transition(.opacity.combined(with: .scale(scale: 0.96))) } }
+                .animation(.easeInOut(duration: 0.35), value: job != nil)
                 .onChange(of: active) { _, a in
                     if player.playing, let i = segs.firstIndex(where: { $0.startMs == a }) {
                         withAnimation { proxy.scrollTo(i, anchor: .center) }
@@ -249,7 +248,7 @@ struct DetailView: View {
                     Chip(title: "KOPEERI") { m.copyText() }
                     if job == nil && m.job == nil && !m.busy {
                         Chip(title: Sessions.isRefined(dir) ? "TÄPSUSTA ↻" : "TÄPSUSTA", accent: true) { m.refineSelected() }
-                            .help("Kogu heli uuesti täis 30 s akende ja beam 2-ga (⌘T). Praegune tekst jääb varuks.")
+                            .help("Kogu heli uuesti täpsemalt + kõnelejate eristamine (⌘T). Praegune tekst jääb varuks.")
                     }
                 }
                 Text("kestus \(formatClock(Sessions.durationMs(dir))) · \(Sessions.lang(dir) == "en" ? "inglise" : "eesti") keel · \(segs.count) lõiku")

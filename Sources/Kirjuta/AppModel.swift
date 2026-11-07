@@ -253,7 +253,6 @@ final class AppModel: ObservableObject {
                 }, progress: { phase, p in
                     DispatchQueue.main.async {
                         self.job?.phase = phase.rawValue; self.job?.progress = p
-                        if let d = self.job?.dir, self.selected == d { self.loadSelected() }
                     }
                 })
                 await MainActor.run { self.jobDone(select: dir) }
@@ -281,7 +280,6 @@ final class AppModel: ObservableObject {
                 DispatchQueue.main.async {
                     self.job?.phase = phase == .transcribe ? "TÄPSUSTAN" : phase.rawValue
                     self.job?.progress = p
-                    if self.selected == dir { self.loadSelected() }
                 }
             }
             await MainActor.run { self.jobDone(select: dir) }

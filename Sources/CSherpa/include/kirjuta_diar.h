@@ -12,3 +12,10 @@ void kd_free(void *sd);
 int32_t kd_process(void *sd, const float *samples, int32_t n, kd_turn **out,
                    int32_t (*progress)(int32_t, int32_t, void *), void *arg);
 void kd_free_turns(kd_turn *t);
+
+// Hääle-„sõrmejälg“ (wespeaker) üksikule helitükile.
+void *kd_emb_create(const char *model, int32_t threads);
+void kd_emb_free(void *e);
+int32_t kd_emb_dim(void *e);
+// Kirjutab dim floati out-i; tagastab 0 või < 0 (liiga lühike heli vms).
+int32_t kd_emb_compute(void *e, const float *samples, int32_t n, float *out);
