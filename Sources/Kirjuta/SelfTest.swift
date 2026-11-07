@@ -58,7 +58,7 @@ enum SelfTest {
             let segs = Sessions.loadSegments(dir)
             print("--- TXT ---\n" + Export.plainText(dir, segs))
             print("--- SRT (algus) ---\n" + Export.subtitles(dir, segs, vtt: false).prefix(300))
-            Jobs.refine(dir, lang: lang) { _ in }
+            Jobs.refine(dir, lang: lang) { _, _ in }
             print("--- pärast TÄPSUSTA: \(Sessions.loadSegments(dir).count) lõiku, live-arhiiv olemas: \(FileManager.default.fileExists(atPath: dir.appendingPathComponent("segments.live.tsv").path))")
             print(Export.markdown(dir, Sessions.loadSegments(dir)).prefix(400))
             WhisperEngine.shared.unload()

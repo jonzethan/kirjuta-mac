@@ -37,6 +37,16 @@ public enum Settings {
         get { d.string(forKey: "modelsDir") ?? (NSHomeDirectory() + "/whisper-android/models") }
         set { d.set(newValue, forKey: "modelsDir") }
     }
+    /// Kõnelejate mudelid (pyannote + wespeaker), samad mis Androidis.
+    public static var diarDir: String {
+        get { d.string(forKey: "diarDir") ?? (NSHomeDirectory() + "/whisper-android/third_party/diar") }
+        set { d.set(newValue, forKey: "diarDir") }
+    }
+    /// Kõnelejad TÄPSUSTA/impordi juures: -1 = automaatne, 0 = ei erista, 2–5 = täpne arv.
+    public static var speakers: Int {
+        get { d.object(forKey: "speakers") as? Int ?? -1 }
+        set { d.set(newValue, forKey: "speakers") }
+    }
     public static func modelPath(_ name: String = model) -> String {
         modelsDir + "/taltech-et-turbo-\(name).bin"
     }

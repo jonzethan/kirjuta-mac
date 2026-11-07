@@ -5,12 +5,12 @@ import Foundation
 /// (Pimesi 30 s aknad jätsid katsetes kõnet vahele: vaikusega algav aken visati „vaikuseks“ ja
 /// aken võis alata keset sõna – vt TULEMUSED-MAC.md.)
 public enum Jobs {
-    public enum Phase: String, Sendable { case decode = "TEISENDAN", transcribe = "KIRJUTAN" }
+    public enum Phase: String, Sendable { case decode = "TEISENDAN", speakers = "KÕNELEJAD", transcribe = "KIRJUTAN" }
 
     /// Impordib helifaili uude sessiooni ja kirjutab selle üles. Tagastab sessiooni kausta.
     /// created kutsutakse kohe, kui sessiooni kaust on olemas (vea korral kustuta see).
     /// lang: "auto" | "et" | "en".
-    public static func importFile(_ file: URL, lang: String, created: (URL) -> Void,
+    public static func importFile(_ file: URL, lang: String, speakers: Int = Settings.speakers, created: (URL) -> Void,
                                   progress: @escaping (Phase, Double) -> Void) throws -> URL {
         let dir = Sessions.create()
         Sessions.setLang(dir, lang == "en" ? "en" : "et")
@@ -28,7 +28,7 @@ public enum Jobs {
         w.close()
         AppLog.i("Job", "decoded \(file.lastPathComponent) -> \(ints.count / sampleRate) s in \(Int(Date().timeIntervalSince(t0))) s")
         let tracker = LangTracker(mode: lang)
-        transcribe(dir: dir, sources: [(Sessions.audio(dir), -1)], lang: tracker) { progress(.transcribe, $0) }
+        transcribe(dir: dir, sources: [(Sessions.audio(dir), -1)], lang: tracker, speakers: speakers, progress: progress)
         Sessions.setLang(dir, tracker.dominant)
         AppLog.i("Job", "import done in \(Int(Date().timeIntervalSince(t0))) s")
         return dir
@@ -38,8 +38,8 @@ public enum Jobs {
     /// lang: "auto" | "et" | "en".
     /// cancelled() = true katkestab; siis taastatakse reaalaja-tekst. Tagastab, kas jõudis lõpuni.
     @discardableResult
-    public static func refine(_ dir: URL, lang: String, cancelled: () -> Bool = { false },
-                              progress: @escaping (Double) -> Void) -> Bool {
+    public static func refine(_ dir: URL, lang: String, speakers: Int = Settings.speakers, cancelled: () -> Bool = { false },
+                              progress: @escaping (Phase, Double) -> Void) -> Bool {
         let t0 = Date()
         let fm = FileManager.default
         var sources: [(URL, Int)]
@@ -53,7 +53,7 @@ public enum Jobs {
         }
         Sessions.archiveLiveSegments(dir)
         let tracker = LangTracker(mode: lang, initial: Sessions.lang(dir))
-        guard transcribe(dir: dir, sources: sources, lang: tracker, cancelled: cancelled, progress: progress) else {
+        guard transcribe(dir: dir, sources: sources, lang: tracker, speakers: speakers, cancelled: cancelled, progress: progress) else {
             Sessions.restoreLiveSegments(dir)
             AppLog.i("Job", "refine \(dir.lastPathComponent) cancelled")
             return false
@@ -64,22 +64,45 @@ public enum Jobs {
     }
 
     /// Kirjutab allikad täpses režiimis sessiooni. false = katkestati.
+    /// speakers ≠ 0: kõnelejad eristatakse (üks voog või süsteemiheli voog) ja iga lause saab kõneleja, kelle
+    /// hääl sellega kõige rohkem kattub (nagu Androidis). Katse: kõneleja kaupa eraldi kirjutamine andis
+    /// lühikestele vastustele halvema teksti (vähe konteksti), seega kirjutatakse endiselt VAD-rühmade kaupa.
     @discardableResult
-    static func transcribe(dir: URL, sources: [(URL, Int)], lang: LangTracker, cancelled: () -> Bool = { false },
-                           progress: @escaping (Double) -> Void) -> Bool {
+    static func transcribe(dir: URL, sources: [(URL, Int)], lang: LangTracker, speakers: Int = Settings.speakers,
+                           cancelled: () -> Bool = { false }, progress: @escaping (Phase, Double) -> Void) -> Bool {
         let audios = sources.map { (Sessions.readWav($0.0), $0.1) }
         let grand = Double(max(1, audios.reduce(0) { $0 + $1.0.count }))
         var doneBefore = 0
         var all: [Segment] = []
+        var diarized = false
         for (samples, speaker) in audios {
+            var turns: [Diarizer.Turn] = []
+            let diarize = speakers != Diarizer.off && Diarizer.available && (audios.count == 1 || speaker == Source.system)
+            if diarize {
+                let base = Double(doneBefore) / grand, span = Double(samples.count) / grand
+                progress(.speakers, base)
+                let t = Diarizer.run(samples, speakers: speakers) { progress(.speakers, base + $0 * span) }
+                if cancelled() { return false }
+                if Set(t.map(\.speaker)).count >= 2 {
+                    // mitme vooga: Mina = 0, süsteemiheli kõnelejad 1, 2, …
+                    let off = audios.count > 1 ? 1 : 0
+                    turns = t.map { Diarizer.Turn(startMs: $0.startMs, endMs: $0.endMs, speaker: $0.speaker + off) }
+                    diarized = true
+                }
+            }
             let segs = accurate(samples, speaker: speaker, lang: lang, cancelled: cancelled,
-                                progress: { progress((Double(doneBefore) + $0 * Double(samples.count)) / grand) },
-                                emit: { if audios.count == 1 { Sessions.appendSegment(dir, $0) } }) // jooksvalt nähtav
+                                progress: { progress(.transcribe, (Double(doneBefore) + $0 * Double(samples.count)) / grand) },
+                                emit: { seg in // jooksvalt nähtav
+                                    if audios.count == 1 { Sessions.appendSegment(dir, turns.isEmpty ? seg : Diarizer.assign([seg], turns)[0]) }
+                                })
             if cancelled() { return false }
-            all += segs
+            all += Diarizer.assign(segs, turns)
             doneBefore += samples.count
         }
         if audios.count > 1 { Sessions.saveSegments(dir, all.sorted { $0.startMs < $1.startMs }) }
+        if diarized && audios.count == 1 && Sessions.speakerNames(dir) == [Source.mic: "Mina"] {
+            Sessions.setSpeakerNames(dir, [:]) // mikrofonis on mitu inimest: „Kõneleja 1“, „Kõneleja 2“ …
+        }
         return true
     }
 
@@ -100,9 +123,9 @@ public enum Jobs {
     /// (pikem kui 3 s vaikus alustab uut rühma), iga rühm = üks kodeerija käivitus, beam.
     /// Kui mudel jättis rühma lõpu kirjutamata, tehakse ülejäänud lõigud uue rühmana.
     /// Kui tulemus on kahtlaselt hõre (mudel hüppas kõnest üle), kirjutatakse lõigud ükshaaval.
-    public static func accurate(_ s: [Int16], speaker: Int, lang: LangTracker, groupSec: Double = 15, beam: Int32 = 2,
-                                cancelled: () -> Bool = { false }, progress: (Double) -> Void = { _ in }, emit: (Segment) -> Void = { _ in }) -> [Segment] {
-        let regions = speechRegions(s)
+    public static func accurate(_ s: [Int16], speaker: Int, lang: LangTracker,
+                                groupSec: Double = 15, beam: Int32 = 2, cancelled: () -> Bool = { false }, progress: (Double) -> Void = { _ in }, emit: (Segment) -> Void = { _ in }) -> [Segment] {
+        let regions: [(Int, Int, Int)] = speechRegions(s).map { ($0.0, $0.1, speaker) }
         let maxLen = Int(groupSec * Double(sampleRate))
         let maxGap = 3 * sampleRate
         var out: [Segment] = []
@@ -122,17 +145,18 @@ public enum Jobs {
             return (WhisperEngine.shared.transcribe(f, lang: l, options: o), l)
         }
         // lõigud ükshaaval (varuvariant)
-        func each(_ rs: ArraySlice<(Int, Int)>) {
+        func each(_ rs: ArraySlice<(Int, Int, Int)>) {
             for r in rs {
                 let (w, _) = decode(r.0, r.1)
-                for p in w.pieces { add(Segment(startMs: ms(r.0) + p.t0, endMs: ms(r.0) + p.t1, text: p.text, speaker: speaker)) }
+                for p in w.pieces { add(Segment(startMs: ms(r.0) + p.t0, endMs: ms(r.0) + p.t1, text: p.text, speaker: r.2)) }
             }
         }
         var i = 0
         while i < regions.count && !cancelled() {
             // rühm: regions[i..<j]
             var j = i + 1
-            while j < regions.count, regions[j].1 - regions[i].0 <= maxLen, regions[j].0 - regions[j - 1].1 <= maxGap { j += 1 }
+            while j < regions.count, regions[j].2 == regions[i].2, regions[j].1 - regions[i].0 <= maxLen,
+                  regions[j].0 - regions[j - 1].1 <= maxGap { j += 1 }
             let a = regions[i].0, b = regions[j - 1].1
             let (w, _) = decode(a, b)
             let speechSec = regions[i..<j].reduce(0.0) { $0 + Double($1.1 - $1.0) } / Double(sampleRate)
@@ -145,7 +169,7 @@ public enum Jobs {
                 each(regions[i..<j])
                 i = j
             } else {
-                for p in w.pieces { add(Segment(startMs: ms(a) + p.t0, endMs: ms(a) + p.t1, text: p.text, speaker: speaker)) }
+                for p in w.pieces { add(Segment(startMs: ms(a) + p.t0, endMs: ms(a) + p.t1, text: p.text, speaker: regions[i].2)) }
                 // mudel lõpetas varem: järgmine rühm algab esimesest lõigust, mis algab pärast viimast teksti
                 let end = a + Int(w.endMs) * sampleRate / 1000
                 var k = i + 1

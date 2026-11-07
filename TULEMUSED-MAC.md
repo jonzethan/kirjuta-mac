@@ -68,3 +68,23 @@ rühm), no_speech-reegel väljas, hõreda tulemuse korral lõigud ükshaaval. Pu
 WER vs viide 43 % → 36 %, RTF ~0,2 (koos keeletuvastusega).
 
 Tokenite eelarve loeb nüüd iga beam'i tokeneid eraldi (varem loendati filtri kutseid → beam 2 korral pool eelarvet).
+
+## Kõnelejad (sherpa-onnx 2.0.1, pyannote int8 + wespeaker resnet34, sama mis Androidis)
+
+Kiirus: 5,5 min kõne → 31 s (RTF 0,09, CPU 4 lõime). TÄPSUSTA koos kõnelejatega RTF ~0,32.
+
+Automaatse kõnelejate arvu lävi (õige arv: kõne 2, johanna 2, s1 2, kirjuta-test 2, YouTube 1):
+
+| lävi | kõne | johanna | s1 | kirjuta-test | YouTube |
+|---|---|---|---|---|---|
+| 0,8 (Android) | **5** | 2 | 2 | 2 | 1–2 |
+| 0,9 | **3** | 2 | 2 | 2 | 1 |
+| 1,0 | 2 | **1** | **1** | **1** | 1 |
+| 0,9 + alla 8 % kõnest rühmad liidetakse lähimaga (**uus**) | 2 | 2 | 2 | 2 | 1 |
+
+Kõnes oli üks hääl otse Maci mikrofonis ja teine telefoni kõlarist – sama inimese hääl jagunes 0,8 juures mitmeks.
+3D-Speaker mudelid (campplus, eres2net) andsid samal lävel veel rohkem rühmi.
+
+Kõneleja kaupa eraldi kirjutamine (iga aken ainult ühe kõneleja kõnega) andis lühikestele vastustele halvema
+teksti („Kümmeacks“, „i--.“), seega kirjutatakse VAD-rühmade kaupa ja iga lause saab kõneleja, kelle hääl sellega
+kõige rohkem kattub (Androidi `Diarizer.assign`).

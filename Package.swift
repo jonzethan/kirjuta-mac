@@ -3,10 +3,12 @@ import PackageDescription
 
 // whisper.cpp ehitatakse eraldi (scripts/build-whisper.sh) staatilisteks teekideks Metaliga.
 let wb = Context.packageDirectory + "/vendor/whisper.cpp/build-mac"
+// sherpa-onnx (kõnelejad) – scripts/fetch-sherpa.sh laeb staatilised teegid
+let so = Context.packageDirectory + "/vendor/sherpa-onnx"
 
 let package = Package(
     name: "Kirjuta",
-    platforms: [.macOS(.v14)],
+    platforms: [.macOS("14.2")],
     targets: [
         .target(
             name: "CWhisper",
@@ -27,8 +29,23 @@ let package = Package(
             ]
         ),
         .target(
+            name: "CSherpa",
+            path: "Sources/CSherpa",
+            cSettings: [.headerSearchPath("../../vendor/sherpa-onnx/include")],
+            linkerSettings: [
+                .unsafeFlags(["-L\(so)/lib"]),
+                .linkedLibrary("sherpa-onnx-c-api"), .linkedLibrary("sherpa-onnx-core"),
+                .linkedLibrary("kaldi-native-fbank-core"), .linkedLibrary("kissfft-float"),
+                .linkedLibrary("kaldi-decoder-core"), .linkedLibrary("sherpa-onnx-kaldifst-core"),
+                .linkedLibrary("sherpa-onnx-fstfar"), .linkedLibrary("sherpa-onnx-fst"),
+                .linkedLibrary("ssentencepiece_core"), .linkedLibrary("utf8proc"),
+                .linkedLibrary("onnxruntime"), .linkedLibrary("c++"),
+                .linkedFramework("Foundation"), .linkedFramework("CoreML"),
+            ]
+        ),
+        .target(
             name: "KirjutaCore",
-            dependencies: ["CWhisper"],
+            dependencies: ["CWhisper", "CSherpa"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .executableTarget(

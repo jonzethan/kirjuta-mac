@@ -45,12 +45,15 @@ enum Bench {
             let dir = FileManager.default.temporaryDirectory.appendingPathComponent("kirjuta-bench-\(getpid())")
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             let w = try! WavWriter(url: Sessions.audio(dir)); w.write(ints[...]); w.close()
-            Jobs.refine(dir, lang: lang) { _ in }
-            out = Sessions.loadSegments(dir).map { ($0.startMs, $0.endMs, $0.text) }
+            Jobs.refine(dir, lang: lang) { _, _ in }
+            out = Sessions.loadSegments(dir).map { ($0.startMs, $0.endMs, "[\($0.speaker)] " + $0.text) }
             try? FileManager.default.removeItem(at: dir)
         case "vad":
             let segs = Jobs.accurate(ints, speaker: 0, lang: tracker, groupSec: Double(int(0, 28)), beam: Int32(int(1, 2)))
             out = segs.map { ($0.startMs, $0.endMs, $0.text) }
+        case "diar":
+            let turns = Diarizer.run(ints, speakers: int(0, -1))
+            out = turns.map { ($0.startMs, $0.endMs, "S\($0.speaker)") }
         default:
             err("tundmatu režiim"); return 1
         }

@@ -277,8 +277,9 @@ final class AppModel: ObservableObject {
         jobCancel = cancel
         AppLog.i("Job", "refine \(dir.lastPathComponent)")
         Task.detached {
-            Jobs.refine(dir, lang: Settings.lang, cancelled: { cancel.isSet }) { p in
+            Jobs.refine(dir, lang: Settings.lang, cancelled: { cancel.isSet }) { phase, p in
                 DispatchQueue.main.async {
+                    self.job?.phase = phase == .transcribe ? "TÄPSUSTAN" : phase.rawValue
                     self.job?.progress = p
                     if self.selected == dir { self.loadSelected() }
                 }

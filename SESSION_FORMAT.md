@@ -17,6 +17,10 @@ Telefoni kausta võib kopeerida otse `~/Kirjuta/sessions/` alla ja vastupidi.
 
 ## Mina / Nemad
 - Kõneleja number tuleb voost: **0 = mikrofon**, **1 = süsteemiheli**. Mac kirjutab `speakers.txt`-i `0=Mina` ja `1=Nemad`.
+- Pärast TÄPSUSTA't eristatakse kõnelejad hääle järgi (sherpa-onnx, nagu Androidis):
+  - ainult mikrofon / imporditud fail: kõnelejad 0, 1, 2 … esinemise järjekorras; kui leiti ≥ 2 häält, kustutatakse
+    vaikimisi `0=Mina` ja nimed on „Kõneleja 1“, „Kõneleja 2“ … (kasutaja saab ümber nimetada);
+  - mikrofon + süsteemiheli: 0 = Mina, süsteemiheli hääled 1, 2, 3 …
   Android näitab neid tavaliste kõnelejanimedena, seega telefon ei katke.
 - Kui süsteemiheli voole tehakse hiljem kõnelejate eristus (etapp 6), saavad sealsed kõnelejad numbrid alates 1
   (`1=Nemad`/`1=Kõneleja A`, `2=…`); 0 jääb alati „Mina“ jaoks.

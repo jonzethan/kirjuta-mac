@@ -9,3 +9,4 @@ build-mac/
 .DS_Store
 *.log
 .swiftpm/
+vendor/sherpa-onnx/

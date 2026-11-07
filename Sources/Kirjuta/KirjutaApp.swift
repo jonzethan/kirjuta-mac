@@ -77,6 +77,11 @@ struct SettingsView: View {
                 Text("Ainult eesti").tag("et")
                 Text("Ainult inglise").tag("en")
             }.disabled(m.busy)
+            Picker("Kõnelejad", selection: Binding(get: { Settings.speakers }, set: { Settings.speakers = $0; m.objectWillChange.send() })) {
+                Text("Eristab automaatselt").tag(-1)
+                ForEach(2...5, id: \.self) { Text("\($0) kõnelejat").tag($0) }
+                Text("Ei erista").tag(0)
+            }
             Toggle("Täpsusta automaatselt pärast salvestamist", isOn: Binding(
                 get: { Settings.autoRefine }, set: { Settings.autoRefine = $0; m.objectWillChange.send() }))
             LabeledContent("Mudelite kaust", value: Settings.modelsDir)
