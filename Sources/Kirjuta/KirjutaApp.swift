@@ -115,6 +115,7 @@ struct GeneralSettings: View {
 struct DictationSettings: View {
     @EnvironmentObject var d: DictationController
     @State private var words = Settings.magicWords
+    @State private var stopWords = Settings.stopWords
     @State private var silence = Settings.dictSilenceSec
     @State private var postSend = Settings.dictPostSendSec
     @State private var save = Settings.saveDictations
@@ -125,9 +126,11 @@ struct DictationSettings: View {
             LabeledContent("Kiirklahv") { HotkeyRecorder { d.registerHotkey() } }
             TextField("Võlusõnad (saadab, vajutab Enter)", text: $words)
                 .onChange(of: words) { _, v in Settings.magicWords = v }
-            Text("Komaga eraldatult. Võlusõna peab olema öeldud eraldi, pärast väikest pausi.")
+            TextField("Lõpusõnad (lõpetab ilma saatmata)", text: $stopWords)
+                .onChange(of: stopWords) { _, v in Settings.stopWords = v }
+            Text("Komaga eraldatult. Sõna peab olema öeldud eraldi, pärast väikest pausi.")
                 .font(.caption).foregroundStyle(.secondary)
-            Stepper("Pärast saatmist ootab uut juttu: \(Int(postSend)) s", value: $postSend, in: 1...15, step: 1)
+            Stepper("Pärast saatmist ootab uut juttu: \(Int(postSend)) s", value: $postSend, in: 1...30, step: 1)
                 .onChange(of: postSend) { _, v in Settings.dictPostSendSec = v }
             Stepper("Lõpetab ise pärast vaikust: \(Int(silence)) s", value: $silence, in: 5...300, step: 5)
                 .onChange(of: silence) { _, v in Settings.dictSilenceSec = v }

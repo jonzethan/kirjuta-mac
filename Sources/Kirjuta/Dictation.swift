@@ -46,8 +46,9 @@ final class DictationController: ObservableObject {
         }
         app.cancelRefineIfRunning()
 
-        let words = Settings.magicWords.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-        let eng = DictationEngine(config: .init(magicWords: words, silenceSec: Settings.dictSilenceSec,
+        func list(_ s: String) -> [String] { s.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty } }
+        let eng = DictationEngine(config: .init(magicWords: list(Settings.magicWords), stopWords: list(Settings.stopWords),
+                                                silenceSec: Settings.dictSilenceSec,
                                                 postSendSec: Settings.dictPostSendSec, lang: Settings.lang))
         eng.onText = { [weak self] t in self?.typer.update(to: t); self?.preview = t }
         eng.onSend = { [weak self] in self?.typer.pressReturn(); self?.preview = "" }
@@ -219,6 +220,9 @@ struct DictationHUD: View {
         default: return K.rec
         }
     }
+    static func first(_ list: String, _ def: String) -> String {
+        list.split(separator: ",").first.map { $0.trimmingCharacters(in: .whitespaces) } ?? def
+    }
     var isError: Bool { if case .error = d.phase { return true }; return false }
     var titleColor: Color { if case .error = d.phase { return .orange }; return K.text }
     var borderColor: Color { d.phase == .awaitingSend ? K.accent.opacity(0.6) : K.line }
@@ -229,8 +233,7 @@ struct DictationHUD: View {
         case .listening: return "KUULAN · KIRJUTAN LAHTRISSE"
         case .writing: return "KIRJUTAN"
         case .awaitingSend:
-            let w = Settings.magicWords.split(separator: ",").first.map { $0.trimmingCharacters(in: .whitespaces) } ?? "saada"
-            return "ÜTLE „\(w.uppercased())“ VÕI JÄTKA"
+            return "ÜTLE „\(Self.first(Settings.magicWords, "saada").uppercased())“ VÕI JÄTKA"
         case .sent: return "SAADETUD ✓"
         case .finishing: return "LÕPETAN…"
         case .error: return "EI SAA ALUSTADA"
@@ -239,7 +242,7 @@ struct DictationHUD: View {
     var sub: String? {
         switch d.phase {
         case .error(let m): return m
-        case .sent: return "räägi edasi uue sõnumi jaoks"
+        case .sent: return "räägi edasi või ütle „\(Self.first(Settings.stopWords, "lõpeta"))“"
         default: return d.preview.isEmpty ? "\(Settings.dictKeyLabel) lõpetab" : String(d.preview.suffix(80))
         }
     }

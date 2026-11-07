@@ -10,15 +10,18 @@ import Foundation
 /// Kõik tagasikutsed tulevad peajärjekorras.
 public final class DictationEngine: @unchecked Sendable {
     public enum State: Equatable, Sendable { case listening, writing, awaitingSend, sent, stopped }
-    public enum StopReason: Sendable { case user, silence, afterSend }
+    public enum StopReason: Sendable { case user, silence, afterSend, stopWord }
 
     public struct Config: Sendable {
         public var magicWords: [String]
+        /// Lõpetab dikteerimise (ilma saatmata), nt „lõpeta“.
+        public var stopWords: [String]
         public var silenceSec: Double
         public var postSendSec: Double
         public var lang: String
-        public init(magicWords: [String], silenceSec: Double, postSendSec: Double, lang: String) {
-            self.magicWords = magicWords; self.silenceSec = silenceSec; self.postSendSec = postSendSec; self.lang = lang
+        public init(magicWords: [String], stopWords: [String] = [], silenceSec: Double, postSendSec: Double, lang: String) {
+            self.magicWords = magicWords; self.stopWords = stopWords
+            self.silenceSec = silenceSec; self.postSendSec = postSendSec; self.lang = lang
         }
     }
 
@@ -144,7 +147,7 @@ public final class DictationEngine: @unchecked Sendable {
             if text.contains(where: { $0.isLetter }) { lock.withLock { textSeen = true } }
             // võlusõna jooksvas tekstis kaks korda järjest (~1,2 s): lõika kohe, ära oota pausi
             // (taustamüra korral ei pruugi energia-VAD pausi üldse leida)
-            let magicNow = endsWithMagic(text)
+            let magicNow = endsWith(text, cfg.magicWords) || endsWith(text, cfg.stopWords)
             if magicNow && lastInterimMagic { lock.withLock { forceCut = true } }
             lastInterimMagic = magicNow
             publish()
@@ -162,17 +165,26 @@ public final class DictationEngine: @unchecked Sendable {
         let l = secs < 2 ? tracker.current : tracker.resolve(f)
         var pieces = decode(f, lang: l)
         var text = pieces.map(\.text).joined(separator: " ").trimmingCharacters(in: .whitespaces)
-        if secs < 2.5, tracker.mode == "auto", !isMagic(text) {
+        if secs < 2.5, tracker.mode == "auto", !isMagic(text), !isStop(text) {
             // võlusõna teises keeles („send it“ eesti keele režiimis jne)
             let other = decode(f, lang: l == "et" ? "en" : "et")
             let t2 = other.map(\.text).joined(separator: " ")
-            if isMagic(t2) { pieces = other; text = t2 }
+            if isMagic(t2) || isStop(t2) { pieces = other; text = t2 }
         }
         AppLog.i("Dict", String(format: "lause %.1f s [%@]: %@", secs, l, text))
         lastInterimMagic = false
         interim = ""
         guard text.contains(where: { $0.isLetter || $0.isNumber }) else { publish(); return }
 
+        // lõpusõna („lõpeta“): kustuta see lahtrist ja lõpeta ilma saatmata
+        if isStop(text) || (pieces.count >= 2 && isStop(pieces.last!.text)) {
+            let rest = isStop(text) ? "" : pieces.dropLast().map(\.text).joined(separator: " ").trimmingCharacters(in: .whitespaces)
+            if !rest.isEmpty { finals.append(rest) }
+            publish()
+            AppLog.i("Dict", "lõpeta")
+            finish(.stopWord)
+            return
+        }
         // võlusõna: kogu lause või viimane (pausiga eraldatud) whisperi lõik
         var send = false
         if isMagic(text) {
@@ -232,18 +244,21 @@ public final class DictationEngine: @unchecked Sendable {
         DispatchQueue.main.async { self.onText(out) }
     }
 
-    /// Kas tekst lõpeb võlusõnaga (kogu tekst või viimane lause).
-    func endsWithMagic(_ text: String) -> Bool {
-        if isMagic(text) { return true }
+    /// Kas tekst lõpeb mõne sõnaga loendist (kogu tekst või viimane lause).
+    func endsWith(_ text: String, _ words: [String]) -> Bool {
+        if matches(text, words) { return true }
         let sentences = text.split(whereSeparator: { ".!?".contains($0) }).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-        return sentences.count >= 2 && isMagic(sentences.last!)
+        return sentences.count >= 2 && matches(sentences.last!, words)
     }
 
-    /// Võlusõna, lubatud üks täheviga (5+ tähte): „saada“ ≈ „saata“, „sada“; „send it“ ≈ „sent it“.
-    func isMagic(_ text: String) -> Bool {
+    func isMagic(_ text: String) -> Bool { matches(text, cfg.magicWords) }
+    func isStop(_ text: String) -> Bool { matches(text, cfg.stopWords) }
+
+    /// Lubatud üks täheviga (5+ tähte): „saada“ ≈ „saata“, „sada“; „lõpeta“ ≈ „lõpetan“; „send it“ ≈ „sent it“.
+    func matches(_ text: String, _ words: [String]) -> Bool {
         let n = Self.norm(text)
         guard !n.isEmpty else { return false }
-        return cfg.magicWords.contains { w in
+        return words.contains { w in
             let m = Self.norm(w)
             return m == n || (m.count >= 5 && Self.distance(m, n) <= 1) || n == m + " " + m
         }

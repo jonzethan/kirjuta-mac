@@ -47,12 +47,17 @@ public enum Settings {
         get { d.string(forKey: "magicWords") ?? "saada, send it" }
         set { d.set(newValue, forKey: "magicWords") }
     }
+    /// Lõpusõnad: lõpetavad dikteerimise ilma saatmata.
+    public static var stopWords: String {
+        get { d.string(forKey: "stopWords") ?? "lõpeta, stop dictation" }
+        set { d.set(newValue, forKey: "stopWords") }
+    }
     public static var dictSilenceSec: Double {
         get { d.object(forKey: "dictSilenceSec") as? Double ?? 30 }
         set { d.set(newValue, forKey: "dictSilenceSec") }
     }
     public static var dictPostSendSec: Double {
-        get { d.object(forKey: "dictPostSendSec") as? Double ?? 3 }
+        get { d.object(forKey: "dictPostSendSec") as? Double ?? 6 }
         set { d.set(newValue, forKey: "dictPostSendSec") }
     }
     /// Kas dikteerimised salvestatakse ka salvestiste nimekirja.

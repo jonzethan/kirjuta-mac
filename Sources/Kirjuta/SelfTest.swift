@@ -73,7 +73,7 @@ enum SelfTest {
         AppLog.echo = true
         guard loadModel(Settings.model) else { return 1 }
         let samples = try! AudioDecoder.decode(URL(fileURLWithPath: file))
-        let eng = DictationEngine(config: .init(magicWords: ["saada", "send it"], silenceSec: 30, postSendSec: 3, lang: "auto"))
+        let eng = DictationEngine(config: .init(magicWords: ["saada", "send it"], stopWords: ["lõpeta", "stop dictation"], silenceSec: 30, postSendSec: 6, lang: "auto"))
         let t0 = Date()
         func stamp() -> String { String(format: "%5.1fs", Date().timeIntervalSince(t0)) }
         var field = ""
