@@ -27,6 +27,7 @@ struct KirjutaApp: App {
                 .onAppear { delegate.model = model }
         }
         .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: 1200, height: 780)
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button(model.recording ? "Lõpeta salvestamine" : "Alusta salvestamist") { model.toggleRecording() }
