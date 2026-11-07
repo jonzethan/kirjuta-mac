@@ -11,9 +11,12 @@ public enum TextCleaner {
     private static let sentenceSplit = try! NSRegularExpression(pattern: "(?<=[.!?…])\\s+")
     private static let nonWord = try! NSRegularExpression(pattern: "[^\\p{L}\\p{N} ]")
     private static let spaces = try! NSRegularExpression(pattern: "\\s+")
+    private static let hyphenRepeat = try! NSRegularExpression(pattern: "\\b([\\p{L}\\p{N}]+)(?:-\\1\\b){2,}", options: [.caseInsensitive])
 
     public static func clean(_ text: String) -> String {
         if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "" }
+        // 0) „Bat-Bat-Bat-…“ -> „Bat“ (kordamine ühe sõna sees)
+        let text = replace(text, hyphenRepeat, "$1")
         // 1) sõnad võõra tähestikuga (kirillitsa, hangul jne) välja
         let words = split(text, spaces).filter { !matches(nonLatinLetter, $0) }
         var t = words.joined(separator: " ")

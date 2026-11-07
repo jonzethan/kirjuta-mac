@@ -22,9 +22,10 @@ enum SelfTest {
         let done = DispatchSemaphore(value: 0)
         let t0 = Date()
         func stamp() -> String { String(format: "%5.1fs", Date().timeIntervalSince(t0)) }
-        let worker = TranscribeWorker(lang: lang, onSegment: { seg in
+        let tracker = LangTracker(mode: lang)
+        let worker = TranscribeWorker(lang: tracker, onSegment: { seg in
             Sessions.appendSegment(dir, seg)
-            print("\(stamp()) LÕPLIK [\(formatClock(seg.startMs, forceHours: true))–\(formatClock(seg.endMs))] \(seg.text)")
+            print("\(stamp()) LÕPLIK \(tracker.current) [\(formatClock(seg.startMs, forceHours: true))–\(formatClock(seg.endMs))] \(seg.text)")
         }, onInterim: { _, start, text in
             print("\(stamp())   jooksev [\(formatClock(start, forceHours: true))] \(text)")
         }, onIdle: { done.signal() })
@@ -57,7 +58,7 @@ enum SelfTest {
             let segs = Sessions.loadSegments(dir)
             print("--- TXT ---\n" + Export.plainText(dir, segs))
             print("--- SRT (algus) ---\n" + Export.subtitles(dir, segs, vtt: false).prefix(300))
-            Jobs.refine(dir) { _ in }
+            Jobs.refine(dir, lang: lang) { _ in }
             print("--- pärast TÄPSUSTA: \(Sessions.loadSegments(dir).count) lõiku, live-arhiiv olemas: \(FileManager.default.fileExists(atPath: dir.appendingPathComponent("segments.live.tsv").path))")
             print(Export.markdown(dir, Sessions.loadSegments(dir)).prefix(400))
             WhisperEngine.shared.unload()

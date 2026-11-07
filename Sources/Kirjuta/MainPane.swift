@@ -111,9 +111,11 @@ struct LiveView: View {
             PaneHeader {
                 RecLed(active: m.recording, size: 7)
                 Text(m.recording ? "SALVESTAB" : "LÕPETAB").label(m.recording ? K.rec : K.text, tracking: 3)
+                Text(formatClock(m.elapsedMs, forceHours: true)).label(K.textDim, tracking: 1)
             } trailing: {
                 Text(statusLine).label(K.textFaint, size: 10, tracking: 1)
-                Text(m.lang == "en" ? "ENG" : "EST").label(K.accent).padding(.leading, 8)
+                Text(m.liveLang == "en" ? "ENG" : "EST").label(K.accent).padding(.leading, 8)
+                    .help(m.lang == "auto" ? "Keel tuvastatakse automaatselt" : "Keel on seadetes lukustatud")
             }
 
             ScrollViewReader { proxy in
@@ -139,17 +141,10 @@ struct LiveView: View {
                 .onChange(of: m.interim.values.map(\.text)) { _, _ in proxy.scrollTo("bottom", anchor: .bottom) }
             }
 
-            HLine()
-            VStack(spacing: 0) {
-                Waveform(levels: m.levels, active: m.recording).frame(height: 36).padding(.horizontal, 28).padding(.top, 16)
-                Text(formatClock(m.elapsedMs, forceHours: true)).font(K.clock).foregroundStyle(K.text).padding(.top, 12)
-                Text(m.error ?? (m.recording ? "jooksev tekst on hall · lõplik tekst ilmub pausi järel" : "kirjutan viimase lõigu…"))
-                    .label(m.error != nil ? K.rec : K.textFaint, size: 10, tracking: 1.5).padding(.top, 4)
-                RecordButton(recording: m.recording, enabled: m.recording, size: 64) { m.stop() }
-                    .padding(.top, 14).padding(.bottom, 20)
+            if let e = m.error {
+                HLine()
+                Text(e).label(K.rec, size: 10, tracking: 1).padding(10)
             }
-            .frame(maxWidth: .infinity)
-            .background(K.bg)
         }
     }
 
@@ -160,7 +155,7 @@ struct LiveView: View {
     }
 
     var statusLine: String {
-        String(format: "lag %.1fs · %@ · Metal", Double(m.backlogMs) / 1000, m.model)
+        String(format: "lag %.1fs · %@ · Metal", Double(m.backlogMs) / 1000, m.model) + (m.lang == "auto" ? " · auto" : "")
     }
 }
 

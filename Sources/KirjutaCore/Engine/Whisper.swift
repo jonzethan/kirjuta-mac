@@ -85,10 +85,12 @@ public final class WhisperEngine: @unchecked Sendable {
             actx = Self.audioCtx(forSeconds: seconds)
         }
         let beam: Int32 = accurate ? 2 : 1
+        // reaalajas: tokenite eelarve heli pikkuse järgi (kordamise korral ei jää mudel ~20 s kinni)
+        let maxTokens: Int32 = accurate ? 0 : Int32(seconds * 10 + 30)
         let t0 = Date()
         let raw: String = samples.withUnsafeBufferPointer { buf in
             lang.withCString { l in
-                guard let out = kw_transcribe(ctx, buf.baseAddress, Int32(buf.count), Int32(Self.threads), actx, l, beam, accurate) else { return "" }
+                guard let out = kw_transcribe(ctx, buf.baseAddress, Int32(buf.count), Int32(Self.threads), actx, l, beam, accurate, maxTokens) else { return "" }
                 defer { kw_free_str(out) }
                 return String(decoding: UnsafeRawBufferPointer(start: out, count: strlen(out)), as: UTF8.self)
             }
@@ -112,6 +114,15 @@ public final class WhisperEngine: @unchecked Sendable {
                                   seconds, actx, beam, lang, Int(ms), ms / 1000 / max(seconds, 0.001),
                                   accurate ? String(format: " end=%.1f", Double(endMs) / 1000) : "", cleaned ? " cleaned" : "")) }
         return Window(pieces: pieces, endMs: endMs)
+    }
+
+    /// Keeletuvastus eesti/inglise vahel (~0,5 s). nil = ei õnnestunud.
+    public func detect(_ samples: [Float]) -> (et: Float, en: Float)? {
+        lock.lock(); defer { lock.unlock() }
+        guard let ctx else { return nil }
+        var pe: Float = 0, pn: Float = 0
+        let rc = samples.withUnsafeBufferPointer { kw_detect_et_en(ctx, $0.baseAddress, Int32($0.count), Int32(Self.threads), &pe, &pn) }
+        return rc == 0 ? (pe, pn) : nil
     }
 
     public static var systemInfo: String { String(cString: kw_system_info()) }

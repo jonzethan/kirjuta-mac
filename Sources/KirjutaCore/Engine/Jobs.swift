@@ -11,10 +11,11 @@ public enum Jobs {
 
     /// Impordib helifaili uude sessiooni ja kirjutab selle üles. Tagastab sessiooni kausta.
     /// created kutsutakse kohe, kui sessiooni kaust on olemas (vea korral kustuta see).
+    /// lang: "auto" | "et" | "en".
     public static func importFile(_ file: URL, lang: String, created: (URL) -> Void,
                                   progress: @escaping (Phase, Double) -> Void) throws -> URL {
         let dir = Sessions.create()
-        Sessions.setLang(dir, lang)
+        Sessions.setLang(dir, lang == "en" ? "en" : "et")
         Sessions.setTitle(dir, file.lastPathComponent)
         created(dir)
         progress(.decode, -1)
@@ -28,13 +29,16 @@ public enum Jobs {
         w.write(ints[...])
         w.close()
         AppLog.i("Job", "decoded \(file.lastPathComponent) -> \(ints.count / sampleRate) s in \(Int(Date().timeIntervalSince(t0))) s")
-        transcribe(dir: dir, sources: [(Sessions.audio(dir), -1)], lang: lang) { progress(.transcribe, $0) }
+        let tracker = LangTracker(mode: lang)
+        transcribe(dir: dir, sources: [(Sessions.audio(dir), -1)], lang: tracker) { progress(.transcribe, $0) }
+        Sessions.setLang(dir, tracker.dominant)
         AppLog.i("Job", "import done in \(Int(Date().timeIntervalSince(t0))) s")
         return dir
     }
 
     /// TÄPSUSTA: kogu salvestis uuesti täpses režiimis. Reaalaja-tekst jääb faili segments.live.tsv.
-    public static func refine(_ dir: URL, progress: @escaping (Double) -> Void) {
+    /// lang: "auto" | "et" | "en".
+    public static func refine(_ dir: URL, lang: String, progress: @escaping (Double) -> Void) {
         let t0 = Date()
         let fm = FileManager.default
         var sources: [(URL, Int)]
@@ -47,11 +51,13 @@ public enum Jobs {
             sources = [(Sessions.audio(dir), spk.count == 1 ? spk.first! : -1)]
         }
         Sessions.archiveLiveSegments(dir)
-        transcribe(dir: dir, sources: sources, lang: Sessions.lang(dir), progress: progress)
+        let tracker = LangTracker(mode: lang, initial: Sessions.lang(dir))
+        transcribe(dir: dir, sources: sources, lang: tracker, progress: progress)
+        Sessions.setLang(dir, tracker.dominant)
         AppLog.i("Job", "refine \(dir.lastPathComponent) done in \(Int(Date().timeIntervalSince(t0))) s")
     }
 
-    static func transcribe(dir: URL, sources: [(URL, Int)], lang: String, progress: @escaping (Double) -> Void) {
+    static func transcribe(dir: URL, sources: [(URL, Int)], lang: LangTracker, progress: @escaping (Double) -> Void) {
         let audios = sources.map { (Sessions.readWav($0.0), $0.1) }
         let grand = max(1, audios.reduce(0) { $0 + $1.0.count })
         var doneBefore = 0
@@ -71,7 +77,8 @@ public enum Jobs {
                 }
                 let floats = samples[pos..<(pos + len)].map { Float($0) / 32768 }
                 let offsetMs = Int64(pos) * 1000 / Int64(sampleRate)
-                let w = WhisperEngine.shared.transcribeWindow(floats, lang: lang)
+                let l = lang.resolve(floats)
+                let w = WhisperEngine.shared.transcribeWindow(floats, lang: l)
                 for p in w.pieces where p.text.lowercased() != lastText.lowercased() {
                     let seg = Segment(startMs: offsetMs + p.t0, endMs: offsetMs + p.t1, text: p.text, speaker: speaker)
                     all.append(seg)
@@ -79,7 +86,9 @@ public enum Jobs {
                     lastText = p.text
                 }
                 let end = Int(w.endMs) * sampleRate / 1000
-                pos += (end >= minAdvance && end < len - sampleRate) ? end : len
+                let adv = (end >= minAdvance && end < len - sampleRate) ? end : len
+                lang.account(l, samples: adv)
+                pos += adv
                 progress(Double(doneBefore + pos) / Double(grand))
             }
             doneBefore += total

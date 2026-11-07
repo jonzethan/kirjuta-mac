@@ -26,6 +26,8 @@ final class AppModel: ObservableObject {
     @Published var elapsedMs: Int64 = 0
     @Published var levels: [Float] = Array(repeating: 0, count: levelCount)
     @Published var backlogMs: Int64 = 0
+    /// Praegu tuvastatud keel (et/en) salvestamise ajal.
+    @Published var liveLang = "et"
 
     // nimekiri ja valitud salvestis
     @Published var sessions: [Sessions.Info] = []
@@ -45,6 +47,7 @@ final class AppModel: ObservableObject {
     private var mic: MicCapture?
     private var pipe: StreamPipeline?
     private var worker: TranscribeWorker?
+    private var tracker: LangTracker?
     private var undoTask: Task<Void, Never>?
 
     var busy: Bool { recording || finishing }
@@ -125,11 +128,13 @@ final class AppModel: ObservableObject {
         }
         let dir = Sessions.create()
         let lang = self.lang
-        Sessions.setLang(dir, lang)
+        let tracker = LangTracker(mode: lang, initial: lang == "en" ? "en" : "et")
+        Sessions.setLang(dir, tracker.current)
         Sessions.setSpeakerNames(dir, [Source.mic: "Mina"])
-        let worker = TranscribeWorker(lang: lang, onSegment: { [weak self] seg in
+        let worker = TranscribeWorker(lang: tracker, onSegment: { [weak self] seg in
             Sessions.appendSegment(dir, seg)
-            DispatchQueue.main.async { self?.addLive(seg) }
+            let l = tracker.current
+            DispatchQueue.main.async { self?.addLive(seg); self?.liveLang = l }
         }, onInterim: { [weak self] source, start, text in
             DispatchQueue.main.async { self?.setInterim(source, start, text) }
         }, onIdle: { [weak self] in
@@ -148,7 +153,7 @@ final class AppModel: ObservableObject {
                     self.levels.removeFirst(); self.levels.append(level)
                 }
             }
-            self.mic = mic; self.pipe = pipe; self.worker = worker
+            self.mic = mic; self.pipe = pipe; self.worker = worker; self.tracker = tracker
         } catch {
             worker.close()
             try? FileManager.default.removeItem(at: dir)
@@ -156,6 +161,7 @@ final class AppModel: ObservableObject {
             return
         }
         liveDir = dir
+        liveLang = tracker.current
         liveSegments = []
         interim = [:]
         elapsedMs = 0; backlogMs = 0
@@ -193,6 +199,8 @@ final class AppModel: ObservableObject {
         backlogMs = 0
         interim = [:]
         worker = nil
+        if let dir = liveDir, let t = tracker { Sessions.setLang(dir, t.dominant) }
+        tracker = nil
         AppLog.i("Rec", "stop \(liveDir?.lastPathComponent ?? "") \(formatClock(elapsedMs))")
         refreshSessions()
         loadSelected()
@@ -248,7 +256,7 @@ final class AppModel: ObservableObject {
         job = JobState(dir: dir, title: Export.displayTitle(dir), phase: Jobs.Phase.transcribe.rawValue, progress: 0)
         AppLog.i("Job", "refine \(dir.lastPathComponent)")
         Task.detached {
-            Jobs.refine(dir) { p in
+            Jobs.refine(dir, lang: Settings.lang) { p in
                 DispatchQueue.main.async {
                     self.job?.progress = p
                     if self.selected == dir { self.loadSelected() }

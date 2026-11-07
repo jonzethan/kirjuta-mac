@@ -72,6 +72,11 @@ struct SettingsView: View {
                 Text("f16 – originaal (1,6 GB)").tag("f16")
                 Text("q5_0 – väiksem (574 MB)").tag("q5_0")
             }.disabled(m.busy || m.job != nil)
+            Picker("Keel", selection: $m.lang) {
+                Text("Automaatne (eesti / inglise)").tag("auto")
+                Text("Ainult eesti").tag("et")
+                Text("Ainult inglise").tag("en")
+            }.disabled(m.busy)
             LabeledContent("Mudelite kaust", value: Settings.modelsDir)
             LabeledContent("Salvestised") {
                 Button(Sessions.root.path) { NSWorkspace.shared.open(Sessions.root) }.buttonStyle(.link)

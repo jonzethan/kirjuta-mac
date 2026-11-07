@@ -18,21 +18,6 @@ struct Sidebar: View {
 
             HLine()
             if let job = m.job { JobStrip(job: job) }
-            if m.busy {
-                Button { m.selected = m.liveDir } label: {
-                    HStack(spacing: 8) {
-                        RecLed(active: m.recording, size: 6)
-                        Text(m.recording ? "SALVESTAB · \(formatClock(m.elapsedMs))" : "LÕPETAB KIRJUTAMIST…").label(K.rec)
-                        Spacer()
-                        Text("AVA →").label(K.text)
-                    }
-                    .padding(.horizontal, 18).padding(.vertical, 11)
-                    .background(K.rec.opacity(0.08))
-                    .contentShape(Rectangle())
-                }.buttonStyle(.plain)
-                HLine()
-            }
-
             ZStack(alignment: .bottom) {
                 if m.sessions.isEmpty {
                     VStack(spacing: 12) {
@@ -55,20 +40,51 @@ struct Sidebar: View {
             .animation(.easeOut(duration: 0.2), value: m.undo)
 
             HLine()
-            VStack(spacing: 0) {
-                LangSwitch(lang: $m.lang, enabled: !m.busy).padding(.top, 16)
-                RecordButton(recording: m.recording, enabled: m.recording || (!m.finishing && m.job == nil && m.modelState == .ready)) {
-                    m.toggleRecording()
-                }
-                .padding(.top, 16)
-                Text(statusLine).label(m.error != nil && !m.busy ? K.rec : K.textFaint, size: 10, tracking: 1.5)
-                    .multilineTextAlignment(.center).lineLimit(3)
-                    .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 18)
-            }
-            .frame(maxWidth: .infinity)
-            .background(K.bg)
+            RecorderDeck()
         }
         .background(K.bg)
+    }
+
+}
+
+/// Ainus salvestuspult: suur nupp; salvestamise ajal ka lainekuju, kell ja olek.
+/// Kella klõps avab käimasoleva salvestise teksti.
+struct RecorderDeck: View {
+    @EnvironmentObject var m: AppModel
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if m.busy {
+                Button { m.selected = m.liveDir } label: {
+                    VStack(spacing: 8) {
+                        Waveform(levels: m.levels, active: m.recording).frame(height: 30)
+                        Text(formatClock(m.elapsedMs, forceHours: true)).font(K.mono(30, .light)).foregroundStyle(K.text)
+                        HStack(spacing: 6) {
+                            RecLed(active: m.recording, size: 5)
+                            Text(m.recording ? "REC" : "LÕPETAB").label(m.recording ? K.rec : K.text, size: 10)
+                            Text("·").label(K.textFaint, size: 10)
+                            Text(m.liveLang == "en" ? "ENG" : "EST").label(K.accent, size: 10)
+                            Text(String(format: "· lag %.1fs", Double(m.backlogMs) / 1000)).label(K.textFaint, size: 10, tracking: 1)
+                        }
+                    }
+                    .padding(.horizontal, 22).padding(.top, 16)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Näita käimasolevat salvestist")
+            }
+            RecordButton(recording: m.recording,
+                         enabled: m.recording || (!m.finishing && m.job == nil && m.modelState == .ready)) {
+                m.toggleRecording()
+            }
+            .padding(.top, 16)
+            Text(statusLine).label(m.error != nil && !m.busy ? K.rec : K.textFaint, size: 10, tracking: 1.5)
+                .multilineTextAlignment(.center).lineLimit(3)
+                .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 18)
+        }
+        .frame(maxWidth: .infinity)
+        .background(K.bg)
+        .animation(.easeOut(duration: 0.2), value: m.busy)
     }
 
     var statusLine: String {
@@ -78,10 +94,11 @@ struct Sidebar: View {
         case .failed(let s): return s
         case .ready: break
         }
-        if m.recording { return "salvestis käib · ⌘R lõpetab" }
+        if m.recording { return "⌘R lõpetab" }
         if m.finishing { return "kirjutan viimast lõiku…" }
         if m.job != nil { return "oota, fail on töös" }
-        return "uus salvestis · ⌘R"
+        let lang = m.lang == "auto" ? "keel automaatne" : (m.lang == "en" ? "ainult inglise" : "ainult eesti")
+        return "uus salvestis · ⌘R · \(lang)"
     }
 }
 

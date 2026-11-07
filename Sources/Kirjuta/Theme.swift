@@ -144,34 +144,6 @@ struct Chip: View {
     }
 }
 
-/// Keelevalik EST | ENG (liuguriga).
-struct LangSwitch: View {
-    @Binding var lang: String
-    let enabled: Bool
-    private let opts = [("et", "EST"), ("en", "ENG")]
-    private let w: CGFloat = 60
-    var body: some View {
-        ZStack(alignment: .leading) {
-            Capsule().fill(K.accent.opacity(0.14))
-                .overlay(Capsule().strokeBorder(K.accent.opacity(0.55)))
-                .frame(width: w, height: 28)
-                .offset(x: lang == "en" ? w : 0)
-                .animation(.spring(duration: 0.25), value: lang)
-            HStack(spacing: 0) {
-                ForEach(opts, id: \.0) { code, title in
-                    Text(title).label(code == lang ? K.accent : K.textFaint)
-                        .frame(width: w, height: 28)
-                        .contentShape(Capsule())
-                        .onTapGesture { if enabled { lang = code } }
-                }
-            }
-        }
-        .padding(3)
-        .overlay(Capsule().strokeBorder(K.line))
-        .opacity(enabled ? 1 : 0.5)
-    }
-}
-
 /// Taseme-lainekuju (viimased N taset).
 struct Waveform: View {
     let levels: [Float]

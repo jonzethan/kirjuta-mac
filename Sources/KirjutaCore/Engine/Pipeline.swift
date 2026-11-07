@@ -13,13 +13,13 @@ public final class TranscribeWorker: @unchecked Sendable {
     private var finalizedUpTo: [Int: Int64] = [:]
     private var closed = false
     private var queuedSamples = 0
-    private let lang: String
+    public let lang: LangTracker
     private let onSegment: (Segment) -> Void
     private let onInterim: (Int, Int64, String) -> Void
     private let onIdle: () -> Void
 
     /// Tagasikutsed tulevad töölõimel. onInterim(source, startMs, tekst) – tühi tekst = kustuta jooksev tekst.
-    public init(lang: String, onSegment: @escaping (Segment) -> Void,
+    public init(lang: LangTracker, onSegment: @escaping (Segment) -> Void,
                 onInterim: @escaping (Int, Int64, String) -> Void = { _, _, _ in },
                 onIdle: @escaping () -> Void) {
         self.lang = lang
@@ -74,9 +74,13 @@ public final class TranscribeWorker: @unchecked Sendable {
                     queue.removeFirst()
                 }
                 cond.unlock()
-                let text = engine.isLoaded
-                    ? engine.transcribe(merged.floats(), lang: lang).map(\.text).joined(separator: " ")
-                    : ""
+                var text = ""
+                if engine.isLoaded {
+                    let floats = merged.floats()
+                    let l = lang.resolve(floats)
+                    text = engine.transcribe(floats, lang: l).map(\.text).joined(separator: " ")
+                    lang.account(l, samples: floats.count)
+                }
                 cond.withLock { queuedSamples -= merged.samples.count }
                 if text.contains(where: { $0.isLetter || $0.isNumber }) {
                     onSegment(Segment(startMs: merged.startMs, endMs: merged.endMs, text: text, speaker: merged.source))
@@ -90,7 +94,7 @@ public final class TranscribeWorker: @unchecked Sendable {
             if isStale(chunk) { cond.unlock(); continue }
             cond.unlock()
             let text = engine.isLoaded
-                ? engine.transcribe(chunk.floats(), lang: lang, log: false).map(\.text).joined(separator: " ")
+                ? engine.transcribe(chunk.floats(), lang: lang.current, log: false).map(\.text).joined(separator: " ")
                 : ""
             let stale = cond.withLock { isStale(chunk) || closed }
             if !stale { onInterim(source, chunk.startMs, text) }

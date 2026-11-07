@@ -20,8 +20,8 @@ public enum Source {
 public enum Settings {
     private static var d: UserDefaults { .standard }
     public static var lang: String {
-        get { d.string(forKey: "lang") ?? "et" }
-        set { d.set(newValue, forKey: "lang") }
+        get { d.string(forKey: "langMode") ?? "auto" }   // auto | et | en
+        set { d.set(newValue, forKey: "langMode") }
     }
     /// f16 | q8_0 | q5_0
     public static var model: String {
