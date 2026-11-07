@@ -286,6 +286,16 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Ainult kõnelejad uuesti (tekst jääb): -1 automaatne, 1–5 täpne arv.
+    func reassignSpeakers(_ n: Int) {
+        guard let dir = selected, canRunJob(), dir != liveDir || !busy else { return }
+        job = JobState(dir: dir, title: Export.displayTitle(dir), phase: Jobs.Phase.speakers.rawValue, progress: -1)
+        Task.detached {
+            Jobs.reassignSpeakers(dir, speakers: n)
+            await MainActor.run { self.jobDone(select: dir) }
+        }
+    }
+
     private func canRunJob() -> Bool {
         if job != nil { error = "Üks töö juba käib – oota, kuni see lõpeb"; return false }
         if busy { error = "Salvestamine käib – lõpeta see enne"; return false }

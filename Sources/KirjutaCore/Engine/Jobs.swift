@@ -63,6 +63,29 @@ public enum Jobs {
         return true
     }
 
+    /// Ainult kõnelejad uuesti (tekst jääb samaks). speakers: -1 automaatne, 1 = üks kõneleja, 2–5 täpne arv.
+    /// Ühe vooga sessioonidele (mikrofon või imporditud fail).
+    public static func reassignSpeakers(_ dir: URL, speakers: Int) {
+        let t0 = Date()
+        let segs = Sessions.loadSegments(dir)
+        guard !segs.isEmpty else { return }
+        let samples = Sessions.readWav(Sessions.audio(dir))
+        var out: [Segment]
+        if speakers == 1 || speakers == 0 {
+            out = segs.map { Segment(startMs: $0.startMs, endMs: $0.endMs, text: $0.text, speaker: 0) }
+        } else if speakers > 1 {
+            out = Diarizer.clusterSentences(segs, samples: samples, k: speakers)
+        } else {
+            let turns = Diarizer.run(samples, speakers: -1)
+            out = Set(turns.map(\.speaker)).count >= 2 ? Diarizer.assignByVoice(segs, turns, samples: samples)
+                : segs.map { Segment(startMs: $0.startMs, endMs: $0.endMs, text: $0.text, speaker: 0) }
+        }
+        Sessions.saveSegments(dir, out)
+        let n = Set(out.map(\.speaker)).count
+        if n >= 2 && Sessions.speakerNames(dir) == [Source.mic: "Mina"] { Sessions.setSpeakerNames(dir, [:]) }
+        AppLog.i("Job", "speakers \(dir.lastPathComponent) mode=\(speakers) -> \(n) in \(Int(Date().timeIntervalSince(t0) * 1000)) ms")
+    }
+
     /// Kirjutab allikad täpses režiimis sessiooni. false = katkestati.
     /// speakers ≠ 0: kõnelejad eristatakse (üks voog või süsteemiheli voog) ja iga lause saab kõneleja, kelle
     /// hääl sellega kõige rohkem kattub (nagu Androidis). Katse: kõneleja kaupa eraldi kirjutamine andis
@@ -77,7 +100,8 @@ public enum Jobs {
         var diarized = false
         for (samples, speaker) in audios {
             // kõnelejate eristamine (CPU) käib paralleelselt teksti kirjutamisega (GPU)
-            let diarize = speakers != Diarizer.off && Diarizer.available && (audios.count == 1 || speaker == Source.system)
+            let mayDiarize = speakers != Diarizer.off && Diarizer.available && (audios.count == 1 || speaker == Source.system)
+            let diarize = mayDiarize && speakers < 0 // täpse arvu korral rühmitatakse laused hääle järgi (pole pyannote't vaja)
             let diarDone = DispatchSemaphore(value: 0)
             nonisolated(unsafe) var found: [Diarizer.Turn] = []
             if diarize {
@@ -94,10 +118,17 @@ public enum Jobs {
                 diarDone.wait()
             }
             if cancelled() { return false }
+            let off = audios.count > 1 ? 1 : 0
+            if mayDiarize && speakers > 0 {
+                let c = Diarizer.clusterSentences(segs, samples: samples, k: speakers)
+                all += Diarizer.renumber(c, offset: off)
+                diarized = speakers >= 2
+                doneBefore += samples.count
+                continue
+            }
             var turns: [Diarizer.Turn] = []
             if Set(found.map(\.speaker)).count >= 2 {
                 // mitme vooga: Mina = 0, süsteemiheli kõnelejad 1, 2, …
-                let off = audios.count > 1 ? 1 : 0
                 turns = found.map { Diarizer.Turn(startMs: $0.startMs, endMs: $0.endMs, speaker: $0.speaker + off) }
                 diarized = true
             }
@@ -129,7 +160,7 @@ public enum Jobs {
     /// Kui mudel jättis rühma lõpu kirjutamata, tehakse ülejäänud lõigud uue rühmana.
     /// Kui tulemus on kahtlaselt hõre (mudel hüppas kõnest üle), kirjutatakse lõigud ükshaaval.
     public static func accurate(_ s: [Int16], speaker: Int, lang: LangTracker,
-                                groupSec: Double = 20, beam: Int32 = 2, cancelled: () -> Bool = { false }, progress: (Double) -> Void = { _ in }, emit: (Segment) -> Void = { _ in }) -> [Segment] {
+                                groupSec: Double = 20, beam: Int32 = 1, cancelled: () -> Bool = { false }, progress: (Double) -> Void = { _ in }, emit: (Segment) -> Void = { _ in }) -> [Segment] {
         let regions: [(Int, Int, Int)] = speechRegions(s).map { ($0.0, $0.1, speaker) }
         let maxLen = Int(groupSec * Double(sampleRate))
         let maxGap = 3 * sampleRate
@@ -146,6 +177,9 @@ public enum Jobs {
             let l = lang.resolve(f)
             lang.account(l, samples: b - a)
             var o = WhisperEngine.Options(beam: beam, singlePass: true, maxTokens: Int32(secs * 12 + 40), noSpeechThold: 2)
+            // kordused / madal tõenäosus (nt muusika taustal) -> sama koht uuesti kõrgema temperatuuriga.
+            // Ilma selleta tekkisid hallutsinatsioonid („* 01:30 Mirko: Aitäh.“).
+            o.tempInc = 0.2
             if secs >= 20 { o.audioCtx = 0 } else { let c = max(768, Int(secs * 50 + 400)); o.audioCtx = c >= 1500 ? 0 : Int32(c) }
             return (WhisperEngine.shared.transcribe(f, lang: l, options: o), l)
         }

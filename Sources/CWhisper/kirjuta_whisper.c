@@ -113,7 +113,7 @@ void kw_free_str(char *s) { free(s); }
 const char *kw_system_info(void) { return whisper_print_system_info(); }
 
 char *kw_transcribe(void *vk, const float *samples, int n_samples, int threads, int audio_ctx,
-                    const char *lang, int beam, bool single_pass, int max_tokens, const char *prompt, float no_speech_thold) {
+                    const char *lang, int beam, bool single_pass, int max_tokens, const char *prompt, float no_speech_thold, float temp_inc) {
     struct kw_ctx *k = (struct kw_ctx *) vk;
     if (!k) return NULL;
     struct whisper_context *ctx = k->ctx;
@@ -128,7 +128,7 @@ char *kw_transcribe(void *vk, const float *samples, int n_samples, int threads, 
     p.translate = false;
     p.no_context = true;
     p.no_timestamps = false;     // ajatemplid PEAVAD olema sees, muidu mudel kordab
-    p.temperature_inc = 0.0f;    // ilma temperatuuri-kordusteta: ennustatav kiirus
+    p.temperature_inc = temp_inc; // 0 = ilma kordusteta (reaalaeg); TÄPSUSTA: halva tulemuse korral uus katse
     p.single_segment = false;
     p.print_realtime = false;
     p.print_progress = false;

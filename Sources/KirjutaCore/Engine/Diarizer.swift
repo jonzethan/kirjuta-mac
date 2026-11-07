@@ -76,19 +76,14 @@ public enum Diarizer {
         }
     }
 
-    /// Täpsem määramine lause kaupa: iga lause hääle-„sõrmejälg“ võrreldakse kõnelejate keskmise
-    /// sõrmejäljega (k-keskmised, algus = pööretega kattumine). Pyannote liidab lühikesed vahelesegamised
-    /// („Mille kallal?“) sageli naabri pöördega; lause kaupa võrdlus leiab need üles.
-    public static func assignByVoice(_ segs: [Segment], _ turns: [Turn], samples: [Int16]) -> [Segment] {
-        var out = assign(segs, turns)
-        let speakers = Set(out.map(\.speaker)).sorted()
-        guard speakers.count >= 2, ProcessInfo.processInfo.environment["KIRJUTA_VOICE"] != "0",
-              let e = kd_emb_create(embModel, 4) else { return out }
+    // MARK: hääle-„sõrmejälg“ lause kaupa
+
+    /// Normaliseeritud sõrmejälg iga lause kohta (lühikese lause ümbrust laiendatakse 1 s-ni); nil = ei saanud.
+    static func embeddings(_ segs: [Segment], samples: [Int16]) -> [[Float]?] {
+        guard let e = kd_emb_create(embModel, 4) else { return segs.map { _ in nil } }
         defer { kd_emb_free(e) }
         let dim = Int(kd_emb_dim(e))
-        let t0 = Date()
-        // sõrmejälg iga lause kohta (vähemalt 1 s heli: lühikese lause ümbrust laiendatakse)
-        var embs: [[Float]?] = out.map { seg in
+        return segs.map { seg in
             var a = Int(seg.startMs) * 16, b = min(samples.count, Int(seg.endMs) * 16)
             if b - a < 16000 { let pad = (16000 - (b - a)) / 2; a = max(0, a - pad); b = min(samples.count, b + pad) }
             guard b - a >= 8000 else { return nil }
@@ -96,20 +91,33 @@ public enum Diarizer {
             var v = [Float](repeating: 0, count: dim)
             let rc = f.withUnsafeBufferPointer { kd_emb_compute(e, $0.baseAddress, Int32($0.count), &v) }
             guard rc == 0 else { return nil }
-            let n = max(1e-6, sqrt(v.reduce(0) { $0 + $1 * $1 }))
-            return v.map { $0 / n }
+            return normalized(v)
         }
-        func dot(_ x: [Float], _ y: [Float]) -> Float { zip(x, y).reduce(0) { $0 + $1.0 * $1.1 } }
-        for _ in 0..<3 {
-            // keskmised ainult vähemalt 1,5 s lausetest (lühikeste sõrmejälg on mürane)
-            var cent: [Int: [Float]] = [:]
-            for (i, seg) in out.enumerated() where seg.endMs - seg.startMs >= 1500 {
-                guard let v = embs[i] else { continue }
-                let w = Float(min(10_000, seg.endMs - seg.startMs)) / 1000
-                cent[seg.speaker] = zip(cent[seg.speaker] ?? [Float](repeating: 0, count: dim), v).map { $0 + $1 * w }
-            }
+    }
+
+    static func normalized(_ v: [Float]) -> [Float] {
+        let n = max(1e-6, sqrt(v.reduce(0) { $0 + $1 * $1 })); return v.map { $0 / n }
+    }
+    static func dot(_ x: [Float], _ y: [Float]) -> Float { zip(x, y).reduce(0) { $0 + $1.0 * $1.1 } }
+    static func dur(_ s: Segment) -> Int64 { s.endMs - s.startMs }
+
+    /// Kõnelejate keskmised sõrmejäljed (ainult ≥ 1,5 s lausetest – lühikeste oma on mürane; kaal = pikkus).
+    static func centroids(_ segs: [Segment], _ embs: [[Float]?]) -> [Int: [Float]] {
+        var cent: [Int: [Float]] = [:]
+        for (i, seg) in segs.enumerated() where dur(seg) >= 1500 {
+            guard let v = embs[i] else { continue }
+            let w = Float(min(10_000, dur(seg))) / 1000
+            cent[seg.speaker] = zip(cent[seg.speaker] ?? [Float](repeating: 0, count: v.count), v).map { $0 + $1 * w }
+        }
+        return cent.mapValues(normalized)
+    }
+
+    /// k-keskmised: iga lause lähima keskmise juurde, kuni midagi ei muutu (max 5 korda).
+    static func refineByVoice(_ segs: [Segment], _ embs: [[Float]?]) -> [Segment] {
+        var out = segs
+        for _ in 0..<5 {
+            let cent = centroids(out, embs)
             guard cent.count >= 2 else { break }
-            for (k, v) in cent { let n = max(1e-6, sqrt(v.reduce(0) { $0 + $1 * $1 })); cent[k] = v.map { $0 / n } }
             var changed = 0
             out = out.enumerated().map { i, seg in
                 guard let v = embs[i] else { return seg }
@@ -119,12 +127,72 @@ public enum Diarizer {
             }
             if changed == 0 { break }
         }
-        embs.removeAll()
-        // kõneleja 1 = see, kes räägib esimesena
+        return renumber(out)
+    }
+
+    /// Kõneleja 0 = see, kes räägib esimesena (järgmised 1, 2, …).
+    static func renumber(_ segs: [Segment], offset: Int = 0) -> [Segment] {
         var map: [Int: Int] = [:]
-        for seg in out where map[seg.speaker] == nil { map[seg.speaker] = speakers[map.count] }
-        out = out.map { Segment(startMs: $0.startMs, endMs: $0.endMs, text: $0.text, speaker: map[$0.speaker] ?? $0.speaker) }
+        for seg in segs where map[seg.speaker] == nil { map[seg.speaker] = map.count + offset }
+        return segs.map { Segment(startMs: $0.startMs, endMs: $0.endMs, text: $0.text, speaker: map[$0.speaker]!) }
+    }
+
+    /// Automaatne: pyannote pöörded → lause kaupa kattumine → hääle järgi üle vaadatud.
+    /// Pyannote liidab lühikesed vahelesegamised („Mille kallal?“) sageli naabri pöördega; lause kaupa
+    /// võrdlus leiab need üles.
+    public static func assignByVoice(_ segs: [Segment], _ turns: [Turn], samples: [Int16]) -> [Segment] {
+        let out = assign(segs, turns)
+        guard Set(out.map(\.speaker)).count >= 2 else { return out }
+        let t0 = Date()
+        let res = refineByVoice(out, embeddings(out, samples: samples))
         AppLog.i("Diar", "lausete kaupa üle vaadatud \(out.count) lauset, \(Int(Date().timeIntervalSince(t0) * 1000)) ms")
+        return res
+    }
+
+    /// Täpne kõnelejate arv: laused rühmitatakse hääle järgi (keskmise sidemega aglomeratiivne rühmitus
+    /// ≥ 1,5 s lausetel, siis k-keskmised). Töötab ka siis, kui pyannote ei leia vahetusi (muusika taustal,
+    /// heli kõlaritest). Kiire: ainult sõrmejäljed, ~1–5 s.
+    public static func clusterSentences(_ segs: [Segment], samples: [Int16], k: Int) -> [Segment] {
+        let t0 = Date()
+        guard k >= 2, segs.count >= 2 else { return segs.map { Segment(startMs: $0.startMs, endMs: $0.endMs, text: $0.text, speaker: 0) } }
+        let embs = embeddings(segs, samples: samples)
+        var minDur: Int64 = 1500
+        var idx: [Int] = []
+        while true {
+            idx = segs.indices.filter { dur(segs[$0]) >= minDur && embs[$0] != nil }
+            if idx.count >= k || minDur <= 300 { break }
+            minDur /= 2
+        }
+        guard idx.count >= k else { return segs }
+        var clusters = idx.map { [$0] }
+        // sarnasuste maatriks
+        var sim = [[Float]](repeating: [Float](repeating: 0, count: segs.count), count: segs.count)
+        for i in idx { for j in idx where j > i { let d = dot(embs[i]!, embs[j]!); sim[i][j] = d; sim[j][i] = d } }
+        while clusters.count > k {
+            var best: (Float, Int, Int) = (-.infinity, 0, 1)
+            for x in 0..<clusters.count {
+                for y in (x + 1)..<clusters.count {
+                    var t: Float = 0
+                    for i in clusters[x] { for j in clusters[y] { t += sim[i][j] } }
+                    let avg = t / Float(clusters[x].count * clusters[y].count)
+                    if avg > best.0 { best = (avg, x, y) }
+                }
+            }
+            clusters[best.1] += clusters[best.2]
+            clusters.remove(at: best.2)
+        }
+        var lab = [Int: Int]()
+        for (c, members) in clusters.enumerated() { for i in members { lab[i] = c } }
+        let cent = Dictionary(uniqueKeysWithValues: clusters.enumerated().map { c, members in
+            (c, normalized(members.reduce([Float](repeating: 0, count: embs[members[0]]!.count)) { acc, i in
+                zip(acc, embs[i]!).map { $0 + $1 * Float(min(10_000, dur(segs[i]))) / 1000 } }))
+        })
+        let first = segs.enumerated().map { i, seg in
+            let spk = lab[i] ?? embs[i].map { v in cent.max { dot(v, $0.value) < dot(v, $1.value) }!.key } ?? 0
+            return Segment(startMs: seg.startMs, endMs: seg.endMs, text: seg.text, speaker: spk)
+        }
+        let out = refineByVoice(first, embs)
+        AppLog.i("Diar", "laused rühmitatud \(k) kõnelejaks: \(segs.count) lauset, \(Int(Date().timeIntervalSince(t0) * 1000)) ms")
         return out
     }
 

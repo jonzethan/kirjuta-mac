@@ -11,6 +11,14 @@ enum Bench {
     static func run(_ a: [String]) -> Int32 {
         guard a.count >= 3 else { err("vt Bench.swift"); return 1 }
         let file = a[0], lang = a[1], mode = a[2]
+        if mode == "speakers" { // fail = sessiooni kaust (koopia!), lang = kõnelejate arv
+            let dir = URL(fileURLWithPath: file)
+            let t0 = Date()
+            Jobs.reassignSpeakers(dir, speakers: Int(lang) ?? -1)
+            for s in Sessions.loadSegments(dir) { print("\(s.startMs)\t\(s.endMs)\t[\(s.speaker)] \(s.text)") }
+            err(String(format: "speakers: %.1f s", Date().timeIntervalSince(t0)))
+            return 0
+        }
         let p = Array(a.dropFirst(3))
         func int(_ i: Int, _ d: Int) -> Int { i < p.count ? Int(p[i]) ?? d : d }
         let model = (mode == "vad" && p.count > 2) ? p[2] : Settings.model

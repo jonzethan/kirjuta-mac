@@ -247,6 +247,19 @@ struct DetailView: View {
                     Chip(title: "HELI ↗") { m.exportAudio() }
                     Chip(title: "KOPEERI") { m.copyText() }
                     if job == nil && m.job == nil && !m.busy {
+                        Menu {
+                            Button("Automaatne") { m.reassignSpeakers(-1) }
+                            Divider()
+                            Button("1 kõneleja") { m.reassignSpeakers(1) }
+                            ForEach(2...5, id: \.self) { n in Button("\(n) kõnelejat") { m.reassignSpeakers(n) } }
+                        } label: {
+                            Text("KÕNELEJAD \(Set(segs.map(\.speaker)).count) ▾").label(K.text, tracking: 1.5)
+                        }
+                        .menuStyle(.button).menuIndicator(.hidden).buttonStyle(.plain)
+                        .padding(.horizontal, 12).padding(.vertical, 9)
+                        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(K.line))
+                        .fixedSize()
+                        .help("Eristab kõnelejad uuesti (tekst jääb samaks). Kui automaatne eksib, vali täpne arv.")
                         Chip(title: Sessions.isRefined(dir) ? "TÄPSUSTA ↻" : "TÄPSUSTA", accent: true) { m.refineSelected() }
                             .help("Kogu heli uuesti täpsemalt + kõnelejate eristamine (⌘T). Praegune tekst jääb varuks.")
                     }

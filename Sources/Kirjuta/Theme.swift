@@ -213,7 +213,8 @@ struct WorkingCard: View {
         }
     }
     var hint: String {
-        job.cancellable ? "parem tekst ja kõnelejad\nuus salvestus (⌘R) katkestab" : "tekst ilmub, kui valmis"
+        if job.phase == Jobs.Phase.speakers.rawValue && !job.cancellable { return "tekst jääb samaks" }
+        return job.cancellable ? "parem tekst ja kõnelejad\nuus salvestus (⌘R) katkestab" : "tekst ilmub, kui valmis"
     }
 }
 

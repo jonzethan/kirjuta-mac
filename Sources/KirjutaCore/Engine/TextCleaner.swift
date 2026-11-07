@@ -13,8 +13,12 @@ public enum TextCleaner {
     private static let spaces = try! NSRegularExpression(pattern: "\\s+")
     private static let hyphenRepeat = try! NSRegularExpression(pattern: "\\b([\\p{L}\\p{N}]+)(?:-\\1\\b){2,}", options: [.caseInsensitive])
 
+    /// Subtiitrifailide moodi hallutsinatsioon: „* *01:30 - 01:29:* Mirko: Aitäh.“
+    private static let subtitleJunk = try! NSRegularExpression(pattern: "\\d{1,2}:\\d{2}\\s*[-–]\\s*\\d{1,2}:\\d{2}|^\\s*\\*")
+
     public static func clean(_ text: String) -> String {
         if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "" }
+        if matches(subtitleJunk, text) { return "" }
         // 0) „Bat-Bat-Bat-…“ -> „Bat“ (kordamine ühe sõna sees)
         let text = replace(text, hyphenRepeat, "$1")
         // 1) sõnad võõra tähestikuga (kirillitsa, hangul jne) välja

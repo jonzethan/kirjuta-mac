@@ -80,6 +80,7 @@ public final class WhisperEngine: @unchecked Sendable {
         public var maxTokens: Int32? = nil    // nil = heli pikkuse järgi (reaalaeg), 0 = piiramata
         public var prompt: String? = nil
         public var noSpeechThold: Float = 0   // 0 = whisper.cpp vaikimisi (0.6)
+        public var tempInc: Float = 0         // > 0: halva tulemuse (kordused, madal tõenäosus) korral kõrgema temperatuuriga uuesti
         public init(audioCtx: Int32? = nil, beam: Int32 = 1, singlePass: Bool = false, maxTokens: Int32? = nil,
                     prompt: String? = nil, noSpeechThold: Float = 0) {
             self.audioCtx = audioCtx; self.beam = beam; self.singlePass = singlePass
@@ -117,7 +118,7 @@ public final class WhisperEngine: @unchecked Sendable {
             lang.withCString { l in
                 (o.prompt ?? "").withCString { pr in
                     guard let out = kw_transcribe(ctx, buf.baseAddress, Int32(buf.count), Int32(Self.threads), actx, l, beam,
-                                                  o.singlePass, maxTokens, pr, o.noSpeechThold) else { return "" }
+                                                  o.singlePass, maxTokens, pr, o.noSpeechThold, o.tempInc) else { return "" }
                     defer { kw_free_str(out) }
                     return String(decoding: UnsafeRawBufferPointer(start: out, count: strlen(out)), as: UTF8.self)
                 }

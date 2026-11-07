@@ -98,3 +98,15 @@ kõige rohkem kattub (Androidi `Diarizer.assign`).
   (kõne kõik et, YouTube en, mix en/et/et/en) ~2x kiiremini. Rühmad 15 → 20 s.
 - Kõnelejate eristamine (CPU) käib paralleelselt teksti kirjutamisega (GPU).
 - 5,5 min kõne TÄPSUSTA: 106 s → 59 s (RTF 0,18) koos kõnelejatega.
+
+### Hallutsinatsioonid ja kõnelejate arv (2026-11-07 õhtu, kasutaja YouTube-klipp muusikaga)
+
+- TÄPSUSTA beam 2 + `temperature_inc=0` tegi muusika kohal subtiitrimoodi prügi („* *01:30 - 01:29:* Mirko: Aitäh.“)
+  ja jättis 50–54 s vahele. Greedy + `temperature_inc=0.2` (whisperi tavaline varuvariant: korduste / madala
+  tõenäosuse korral uus katse) parandas mõlemad; kõnes RTF 0,14 (46 s / 5,5 min), WER vs viide sama piires.
+- TextCleaner viskab ära lõigud kujul „01:30 - 01:29“ / algav „*“.
+- Pyannote nägi muusikaga klipis kogu 76 s ühe pöördena (1 kõneleja). Lausete hääle-sõrmejälgede
+  aglomeratiivne rühmitus (k = 2) leidis teise inimese lause („Ma ütlen ausalt… Artjom“). Automaatse läve
+  (0,3–0,6) ükski väärtus ei andnud kõigil failidel õiget arvu → täpse arvu korral kasutatakse lausete
+  rühmitust, automaatrežiimis pyannote + lause kaupa ülevaatust. Salvestise vaates „KÕNELEJAD ▾“ jagab
+  kõnelejad uuesti ~5 s-ga (tekst jääb).
