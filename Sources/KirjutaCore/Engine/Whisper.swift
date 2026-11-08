@@ -26,15 +26,26 @@ public final class WhisperEngine: @unchecked Sendable {
 
     public var isLoaded: Bool { lock.withLock { ctx != nil } }
 
+    /// Kus mudel jookseb. Mõnel Macil/macOS-il (nt 14.5) ei toeta ggml-metal kõiki tehteid ja
+    /// whisper_init kutsub abort() – siis kasutatakse aeglasemat, aga töökindlat varianti.
+    public enum Backend: String, CaseIterable, Sendable {
+        case metal       // GPU + flash attention (kiireim)
+        case metalNoFA   // GPU ilma flash attentionita
+        case cpu         // ainult protsessor
+        public var label: String { self == .metal ? "Metal" : self == .metalNoFA ? "Metal (FA off)" : "CPU" }
+    }
+    public private(set) var backend: Backend = .metal
+
     /// Laeb mudeli ja teeb ühe tühja läbimise (Metali soojendus), et ka esimene lause tuleks kiiresti.
     @discardableResult
-    public func load(path: String) -> Bool {
+    public func load(path: String, backend: Backend = .metal) -> Bool {
         lock.lock()
-        if ctx != nil && modelPath == path { lock.unlock(); return true }
+        if ctx != nil && modelPath == path && self.backend == backend { lock.unlock(); return true }
         if let c = ctx { kw_free(c); ctx = nil; modelPath = nil }
         kw_quiet_logs(true)
         let t0 = Date()
-        ctx = kw_init(path, true)
+        ctx = kw_init(path, backend != .cpu, backend == .metal)
+        self.backend = backend
         if ctx != nil { modelPath = path }
         let ok = ctx != nil
         lock.unlock()
@@ -42,7 +53,7 @@ public final class WhisperEngine: @unchecked Sendable {
         if ok {
             let t1 = Date()
             _ = transcribeImpl([Float](repeating: 0, count: 16000), lang: "et", accurate: false, log: false)
-            AppLog.i("Engine", "model \((path as NSString).lastPathComponent) loaded in \(loadMs) ms, warmup \(Int(Date().timeIntervalSince(t1) * 1000)) ms")
+            AppLog.i("Engine", "model \((path as NSString).lastPathComponent) [\(backend.rawValue)] loaded in \(loadMs) ms, warmup \(Int(Date().timeIntervalSince(t1) * 1000)) ms")
         } else {
             AppLog.i("Engine", "model \((path as NSString).lastPathComponent) FAILED to load")
         }

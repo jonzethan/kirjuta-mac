@@ -2,6 +2,9 @@ import Foundation
 import KirjutaCore
 
 let args = CommandLine.arguments
+if let i = args.firstIndex(of: "--probe-gpu"), i + 2 < args.count {
+    exit(GpuProbe.runChild(backend: args[i + 1], path: args[i + 2]))
+}
 if let i = args.firstIndex(of: "--selftest"), i + 1 < args.count {
     let rest = Array(args[(i + 2)...]).filter { !$0.hasPrefix("-") }
     exit(SelfTest.run(file: args[i + 1], lang: rest.first ?? "auto", model: rest.count > 1 ? rest[1] : Settings.model,

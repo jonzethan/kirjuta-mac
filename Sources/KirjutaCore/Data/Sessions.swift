@@ -65,6 +65,17 @@ public enum Settings {
         get { d.object(forKey: "saveDictations") as? Bool ?? false }
         set { d.set(newValue, forKey: "saveDictations") }
     }
+    /// auto | metal | metalNoFA | cpu. auto = proovitakse eraldi protsessis, mis siin Macis töötab.
+    /// Käsurealt: defaults write ee.kirjuta.mac gpu cpu
+    public static var gpu: String {
+        get { d.string(forKey: "gpu") ?? "auto" }
+        set { d.set(newValue, forKey: "gpu") }
+    }
+    /// Automaatse proovi tulemus: "<macOS versioon>|<äpi versioon>|<mudel>" -> Backend.rawValue
+    public static var gpuProbe: [String: String] {
+        get { d.dictionary(forKey: "gpuProbe") as? [String: String] ?? [:] }
+        set { d.set(newValue, forKey: "gpuProbe") }
+    }
     /// f16 | q8_0 | q5_0
     public static var model: String {
         get { d.string(forKey: "model") ?? "q8_0" }

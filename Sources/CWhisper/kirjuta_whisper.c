@@ -48,10 +48,10 @@ void kw_quiet_logs(bool quiet) {
     whisper_log_set(log_cb, NULL);
 }
 
-void *kw_init(const char *model_path, bool use_gpu) {
+void *kw_init(const char *model_path, bool use_gpu, bool flash_attn) {
     struct whisper_context_params cp = whisper_context_default_params();
     cp.use_gpu = use_gpu;
-    cp.flash_attn = true;
+    cp.flash_attn = flash_attn;
     struct whisper_context *c = whisper_init_from_file_with_params(model_path, cp);
     if (!c) return NULL;
     struct kw_ctx *k = calloc(1, sizeof(struct kw_ctx));

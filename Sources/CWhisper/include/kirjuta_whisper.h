@@ -6,8 +6,8 @@
 extern "C" {
 #endif
 
-/// Laeb mudeli. use_gpu = Metal. flash_attn on alati sees. NULL = viga.
-void *kw_init(const char *model_path, bool use_gpu);
+/// Laeb mudeli. use_gpu = Metal, flash_attn = kiire tähelepanu. NULL = viga.
+void *kw_init(const char *model_path, bool use_gpu, bool flash_attn);
 void kw_free(void *ctx);
 
 /// Transkribeerib 16 kHz mono float heli. Tagastab malloc'itud UTF-8 teksti kujul

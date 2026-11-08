@@ -88,6 +88,13 @@ struct GeneralSettings: View {
                               "q5_0": "q5_0 – väiksem (574 MB)"]
                 ForEach(Settings.availableModels, id: \.self) { Text(labels[$0] ?? $0).tag($0) }
             }.disabled(m.busy || m.job != nil || Settings.availableModels.count < 2)
+            Picker("Arvutus", selection: Binding(get: { Settings.gpu }, set: {
+                Settings.gpu = $0; Settings.gpuProbe = [:]; m.reloadModel() })) {
+                Text("Automaatne (\(WhisperEngine.shared.backend.label))").tag("auto")
+                Text("Metal – GPU (kiireim)").tag("metal")
+                Text("Metal ilma flash attentionita").tag("metalNoFA")
+                Text("Ainult CPU (aeglasem, töökindel)").tag("cpu")
+            }.disabled(m.busy || m.job != nil)
             Picker("Keel", selection: $m.lang) {
                 Text("Automaatne (eesti / inglise)").tag("auto")
                 Text("Ainult eesti").tag("et")

@@ -155,7 +155,7 @@ struct LiveView: View {
     }
 
     var statusLine: String {
-        String(format: "lag %.1fs · %@ · Metal", Double(m.backlogMs) / 1000, m.model) + (m.lang == "auto" ? " · auto" : "")
+        String(format: "lag %.1fs · %@ · %@", Double(m.backlogMs) / 1000, m.model, WhisperEngine.shared.backend.label) + (m.lang == "auto" ? " · auto" : "")
     }
 }
 

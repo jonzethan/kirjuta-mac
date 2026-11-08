@@ -81,6 +81,12 @@ final class AppModel: ObservableObject {
 
     // MARK: mudel
 
+    /// Laeb sama mudeli uuesti (nt arvutusviis muutus seadetes).
+    func reloadModel() {
+        objectWillChange.send()
+        loadModel()
+    }
+
     func loadModel() {
         // valitud mudelit pole (nt alla laaditud ainult f16): võta olemasolev
         let avail = Settings.availableModels
@@ -92,7 +98,7 @@ final class AppModel: ObservableObject {
         modelState = .loading
         let path = Settings.modelPath(model)
         Task.detached {
-            let ok = WhisperEngine.shared.load(path: path)
+            let ok = WhisperEngine.shared.load(path: path, backend: GpuProbe.choose(modelPath: path))
             await MainActor.run { self.modelState = ok ? .ready : .failed("Mudelit ei leitud: \(path)") }
         }
     }
