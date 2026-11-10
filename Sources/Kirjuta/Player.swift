@@ -1,12 +1,38 @@
 import AVFoundation
 import SwiftUI
 
+/// Mängimise asukoht eraldi objektis: uueneb 8x sekundis, seda jälgib ainult mängija riba
+/// (muidu joonistataks kogu tekstivaade iga kord uuesti).
+@MainActor
+final class PlayerClock: ObservableObject {
+    @Published var posMs: Int64 = 0
+}
+
 /// Lihtne helimängija salvestise jaoks (lõigu klõps -> heli koht).
 @MainActor
 final class AudioPlayer: ObservableObject {
     @Published private(set) var playing = false
-    @Published private(set) var posMs: Int64 = 0
     @Published private(set) var durMs: Int64 = 0
+    /// Praegu mängiva lõigu algus (muutub ainult lõigu vahetudes).
+    @Published private(set) var activeStart: Int64?
+    /// Lõikude algused (ms), kasvavas järjekorras – activeStart arvutamiseks.
+    var starts: [Int64] = [] { didSet { updateActive() } }
+    let clock = PlayerClock()
+    private(set) var posMs: Int64 {
+        get { clock.posMs }
+        set { clock.posMs = newValue; updateActive() }
+    }
+
+    private func updateActive() {
+        var a: Int64?
+        if playing || posMs > 0 {
+            // viimane algus, mis on <= pos + 150 ms (kahendotsing)
+            var lo = 0, hi = starts.count
+            while lo < hi { let mid = (lo + hi) / 2; if starts[mid] <= posMs + 150 { lo = mid + 1 } else { hi = mid } }
+            a = lo > 0 ? starts[lo - 1] : nil
+        }
+        if a != activeStart { activeStart = a }
+    }
     private var player: AVAudioPlayer?
     static let rates: [Float] = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]
     /// Taasesituse kiirus (helikõrgus jääb samaks); meeles kõigi salvestiste jaoks.
@@ -60,6 +86,7 @@ final class AudioPlayer: ObservableObject {
 
     private func setPlaying(_ on: Bool) {
         playing = on
+        updateActive()
         timer?.invalidate(); timer = nil
         if on {
             timer = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: true) { [weak self] _ in
@@ -81,6 +108,12 @@ extension AudioPlayer {
 
 struct PlayerBar: View {
     @ObservedObject var player: AudioPlayer
+    var body: some View { PlayerBarInner(player: player, clock: player.clock) }
+}
+
+private struct PlayerBarInner: View {
+    @ObservedObject var player: AudioPlayer
+    @ObservedObject var clock: PlayerClock
     @State private var dragging: Double?
 
     var body: some View {
@@ -97,9 +130,9 @@ struct PlayerBar: View {
             }
             .buttonStyle(.plain)
             .keyboardShortcut(.space, modifiers: [])
-            Text(formatClock(player.posMs)).font(K.stamp).foregroundStyle(K.text)
+            Text(formatClock(clock.posMs)).font(K.stamp).foregroundStyle(K.text)
             Slider(value: Binding(
-                get: { dragging ?? (player.durMs > 0 ? Double(player.posMs) / Double(player.durMs) : 0) },
+                get: { dragging ?? (player.durMs > 0 ? Double(clock.posMs) / Double(player.durMs) : 0) },
                 set: { dragging = $0 }
             ), onEditingChanged: { editing in
                 if !editing, let d = dragging { player.seek(Int64(d * Double(player.durMs))); dragging = nil }

@@ -118,6 +118,7 @@ final class AppModel: ObservableObject {
         var idx: [URL: String] = [:]
         for s in sessions { idx[s.dir] = (s.title ?? "") + "\n" + Sessions.loadSegments(s.dir).map(\.text).joined(separator: "\n") }
         textIndex = idx
+        updateHits()
     }
 
     // MARK: otsing
@@ -125,6 +126,7 @@ final class AppModel: ObservableObject {
     /// Otsingu tekst: filtreerib nimekirja ja tõstab avatud salvestises vasted esile.
     @Published var search = "" {
         didSet {
+            updateHits()
             // avatud salvestises vasteid pole -> ava esimene leitud
             guard !query.isEmpty, !isLiveSelected else { return }
             if let sel = selected, hits(in: sel) > 0 { return }
@@ -136,6 +138,13 @@ final class AppModel: ObservableObject {
     /// Enter / nool – järgmine (+1) või eelmine (-1) vaste avatud salvestises.
     @Published var searchStep = (n: 0, dir: 1)
     private var textIndex: [URL: String] = [:]
+    /// Vastete arv salvestise kaupa praeguse otsingu jaoks (arvutatakse üks kord).
+    private var hitCounts: [URL: Int] = [:]
+
+    private func updateHits() {
+        let q = query
+        hitCounts = q.isEmpty ? [:] : textIndex.mapValues { Self.count(q, in: $0) }
+    }
     static let searchOpts: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
 
     var query: String { search.trimmingCharacters(in: .whitespaces) }
@@ -148,9 +157,7 @@ final class AppModel: ObservableObject {
 
     /// Vastete arv salvestises.
     func hits(in dir: URL) -> Int {
-        let q = query
-        guard !q.isEmpty, let t = textIndex[dir] else { return 0 }
-        return Self.count(q, in: t)
+        hitCounts[dir] ?? 0
     }
 
     static func count(_ q: String, in t: String) -> Int {

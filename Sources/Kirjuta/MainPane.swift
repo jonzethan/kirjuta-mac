@@ -202,11 +202,12 @@ struct DetailView: View {
     @State private var renaming: Int?
     @State private var newName = ""
     @State private var cur = 0
+    /// Lõigud (indeksid), kus otsitav tekst esineb – arvutatakse ainult otsingu või teksti muutudes.
+    @State private var matches: [Int] = []
 
     var job: JobState? { m.job?.dir == dir ? m.job : nil }
 
-    /// Lõigud (indeksid), kus otsitav tekst esineb.
-    var matches: [Int] {
+    private func findMatches() -> [Int] {
         let q = m.query
         guard !q.isEmpty else { return [] }
         return m.segments.indices.filter { m.segments[$0].text.range(of: q, options: AppModel.searchOpts) != nil }
@@ -214,7 +215,8 @@ struct DetailView: View {
 
     var body: some View {
         let segs = m.segments
-        let active = activeStart(segs)
+        let active = player.activeStart
+        let curIdx = matches.isEmpty ? -1 : matches[min(cur, matches.count - 1)]
         VStack(spacing: 0) {
             PaneHeader {
                 Text(Export.displayTitle(dir)).label(K.text).lineLimit(1).truncationMode(.middle)
@@ -249,7 +251,7 @@ struct DetailView: View {
                                 }
                             }
                             SegmentRow(seg: s, active: s.startMs == active, highlight: m.query,
-                                       current: !matches.isEmpty && matches[min(cur, matches.count - 1)] == i) {
+                                       current: i == curIdx) {
                                 player.seek(s.startMs, play: true)
                             }
                                 .id(i)
@@ -263,7 +265,9 @@ struct DetailView: View {
                 .allowsHitTesting(job == nil)
                 .overlay { if let job { WorkingCard(job: job).transition(.opacity.combined(with: .scale(scale: 0.96))) } }
                 .animation(.easeInOut(duration: 0.35), value: job != nil)
+                .onChange(of: m.segments.count) { _, _ in matches = findMatches(); player.starts = m.segments.map(\.startMs).sorted() }
                 .onChange(of: m.query, initial: true) { _, _ in
+                    matches = findMatches()
                     cur = 0
                     if let i = matches.first { proxy.scrollTo(i, anchor: .center) }
                 }
@@ -321,7 +325,10 @@ struct DetailView: View {
             .frame(maxWidth: .infinity)
             .background(K.bg)
         }
-        .onAppear { player.load(Sessions.audio(dir), durationMs: Sessions.durationMs(dir)) }
+        .onAppear {
+            player.load(Sessions.audio(dir), durationMs: Sessions.durationMs(dir))
+            player.starts = m.segments.map(\.startMs).sorted()
+        }
         .onDisappear { player.stop() }
         .alert("Nimeta kõneleja", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("Nimi", text: $newName)
@@ -337,8 +344,4 @@ struct DetailView: View {
     }
 
     /// Mängitava lõigu algus (esiletõstmiseks).
-    func activeStart(_ segs: [Segment]) -> Int64? {
-        if !player.playing && player.posMs == 0 { return nil }
-        return segs.last { $0.startMs <= player.posMs + 150 }?.startMs
-    }
 }
