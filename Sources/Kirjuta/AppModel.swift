@@ -48,6 +48,13 @@ final class AppModel: ObservableObject {
     // muu
     @Published var job: JobState?
     private var jobCancel: CancelFlag?
+    /// Täpsustamata salvestised, mis ootavad järjekorras (TÄPSUSTA KÕIK).
+    @Published var refineQueue: [URL] = []
+    @Published var autoRefine: Bool = Settings.autoRefine { didSet { Settings.autoRefine = autoRefine } }
+    /// Täpsustamata salvestised (mitte käimasolev, vähemalt 3 s).
+    var unrefined: [URL] {
+        sessions.filter { !$0.refined && $0.durationMs >= 3000 && !($0.dir == liveDir && busy) }.map(\.dir)
+    }
     /// Kas salvestamist saab alustada (TÄPSUSTA katkestatakse vajadusel).
     var canRecord: Bool { !finishing && modelState == .ready && (job == nil || job!.cancellable) }
     @Published var error: String?
@@ -240,7 +247,8 @@ final class AppModel: ObservableObject {
         refreshSessions()
         loadSelected()
         // täpne ülekirjutus kohe taustal (Macis ~10x kiirem kui reaalaeg)
-        if Settings.autoRefine, let dir = liveDir, elapsedMs >= 3000, job == nil { refine(dir) }
+        if autoRefine, let dir = liveDir, elapsedMs >= 3000, job == nil { refine(dir) }
+        else { startNextQueued() }
     }
 
     /// Äpp sulgub salvestamise ajal: pane WAV korralikult kinni.
@@ -292,6 +300,27 @@ final class AppModel: ObservableObject {
         refine(dir)
     }
 
+    /// Pane kõik täpsustamata salvestised järjekorda (vanimad viimasena – uuemad enne).
+    func refineAllUnrefined() {
+        let todo = unrefined.filter { !refineQueue.contains($0) && $0 != job?.dir }
+        guard !todo.isEmpty else { toast = "Kõik salvestised on juba täpsustatud"; return }
+        refineQueue += todo
+        startNextQueued()
+    }
+
+    func cancelRefineQueue() {
+        refineQueue.removeAll()
+        if let j = job, j.cancellable { jobCancel?.set() }
+    }
+
+    func startNextQueued() {
+        guard job == nil, !busy, modelState == .ready, !dictation.active else { return }
+        while let next = refineQueue.first {
+            refineQueue.removeFirst()
+            if FileManager.default.fileExists(atPath: next.path), !Sessions.isRefined(next) { refine(next); return }
+        }
+    }
+
     private func refine(_ dir: URL) {
         job = JobState(dir: dir, title: Export.displayTitle(dir), phase: "TÄPSUSTAN", progress: 0, cancellable: true)
         let cancel = CancelFlag()
@@ -304,7 +333,12 @@ final class AppModel: ObservableObject {
                     self.job?.progress = p
                 }
             }
-            await MainActor.run { self.jobDone(select: dir) }
+            await MainActor.run {
+                // salvestamine/dikteerimine katkestas järjekorra töö: proovi hiljem uuesti
+                if cancel.isSet, !self.refineQueue.isEmpty || self.busy || self.dictation.active, !Sessions.isRefined(dir),
+                   !self.refineQueue.contains(dir) { self.refineQueue.insert(dir, at: 0) }
+                self.jobDone(select: self.refineQueue.isEmpty ? dir : nil)
+            }
         }
     }
 
@@ -332,6 +366,7 @@ final class AppModel: ObservableObject {
         refreshSessions()
         if let dir, !busy { selected = dir }
         loadSelected()
+        startNextQueued()
     }
 
     // MARK: eksport

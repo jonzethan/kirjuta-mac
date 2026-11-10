@@ -17,6 +17,8 @@ struct Sidebar: View {
             .padding(.top, 34).padding(.bottom, 10) // ruum akna nuppudele
 
             HLine()
+            RefineBar()
+            HLine()
             if let job = m.job { JobStrip(job: job) }
             ZStack(alignment: .bottom) {
                 if m.sessions.isEmpty {
@@ -215,6 +217,7 @@ struct SessionRow: View {
                         ForEach(info.speakers.prefix(5), id: \.self) { Circle().fill(K.speaker($0)).frame(width: 5, height: 5) }
                     }
                 }
+                if !isLive { RefinedBadge(state: refineState) }
                 if info.pinned { Text("▲").font(K.mono(10)).foregroundStyle(K.accent) }
                 if isLive { RecLed(active: m.recording, size: 5) }
             }
@@ -233,9 +236,74 @@ struct SessionRow: View {
         }
     }
 
+    var refineState: RefinedBadge.State {
+        if m.job?.dir == info.dir && m.job?.cancellable == true { return .working }
+        if m.refineQueue.contains(info.dir) { return .queued }
+        return info.refined ? .refined : .raw
+    }
+
     var previewText: String {
         if isLive { return m.liveSegments.last?.text ?? "salvestab…" }
         if m.job?.dir == info.dir && info.preview.isEmpty { return "töös…" }
         return info.preview.isEmpty ? "(tekst puudub)" : info.preview
+    }
+}
+
+/// Täpsustamise olek salvestise juures: ✓ TÄPNE = täpsustatud, KIIRE = ainult reaalaja-tekst.
+struct RefinedBadge: View {
+    enum State { case refined, raw, queued, working }
+    let state: State
+    var body: some View {
+        let (t, c): (String, Color) = switch state {
+        case .refined: ("✓ TÄPNE", K.accent)
+        case .raw: ("KIIRE", K.textFaint)
+        case .queued: ("OOTAB", K.textDim)
+        case .working: ("TÖÖS", K.accent)
+        }
+        Text(t).font(K.mono(9)).foregroundStyle(c)
+            .padding(.horizontal, 5).padding(.vertical, 2)
+            .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(state == .refined ? K.accent.opacity(0.4) : K.line))
+            .help(help)
+    }
+    var help: String {
+        switch state {
+        case .refined: return "Täpsustatud: kogu heli on uuesti täpsemalt üle kirjutatud"
+        case .raw: return "Täpsustamata: ainult salvestamise ajal tehtud kiire tekst"
+        case .queued: return "Ootab täpsustamise järjekorras"
+        case .working: return "Täpsustamine käib"
+        }
+    }
+}
+
+/// Riba nimekirja kohal: automaatse täpsustamise lüliti + „täpsusta kõik täpsustamata“.
+struct RefineBar: View {
+    @EnvironmentObject var m: AppModel
+    var body: some View {
+        let n = m.unrefined.filter { $0 != m.job?.dir }.count
+        HStack(spacing: 8) {
+            Button { m.autoRefine.toggle() } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: m.autoRefine ? "checkmark.square.fill" : "square")
+                        .font(.system(size: 12)).foregroundStyle(m.autoRefine ? K.accent : K.textFaint)
+                    Text("AUTO-TÄPSUSTUS").label(m.autoRefine ? K.text : K.textFaint, size: 10, tracking: 1.5)
+                }.contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(m.autoRefine ? "Sees: pärast salvestamist kirjutatakse kogu salvestis kohe täpsemalt üle"
+                               : "Väljas: salvestis jääb kiire tekstiga, täpsusta hiljem käsitsi")
+            Spacer()
+            if !m.refineQueue.isEmpty {
+                Text("JÄRJEKORRAS \(m.refineQueue.count)").label(K.textDim, size: 10, tracking: 1)
+                Button { m.cancelRefineQueue() } label: { Text("PEATA").label(K.rec, size: 10, tracking: 1.5) }
+                    .buttonStyle(.plain).help("Peata täpsustamine (pooleli salvestis jääb kiire tekstiga)")
+            } else if n > 0 {
+                Button { m.refineAllUnrefined() } label: {
+                    Text("TÄPSUSTA KÕIK (\(n))").label(K.accent, size: 10, tracking: 1.5)
+                }
+                .buttonStyle(.plain).disabled(m.modelState != .ready)
+                .help("Kirjuta kõik täpsustamata salvestised ükshaaval täpsemalt üle. Salvestamine katkestab ja jätkab hiljem.")
+            }
+        }
+        .padding(.horizontal, 18).padding(.vertical, 9)
     }
 }

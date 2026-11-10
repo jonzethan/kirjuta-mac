@@ -117,6 +117,7 @@ final class DictationController: ObservableObject {
         AppLog.i("Dict", "stop \(reason)")
         phase = .idle
         hideHUD(after: 0.4)
+        app?.startNextQueued()
     }
 
     private func cleanupSession() {

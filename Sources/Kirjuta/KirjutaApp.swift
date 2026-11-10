@@ -49,6 +49,9 @@ struct KirjutaApp: App {
                 Divider()
                 Button("Täpsusta") { model.refineSelected() }
                     .keyboardShortcut("t").disabled(model.selected == nil || model.busy || model.job != nil)
+                Button("Täpsusta kõik täpsustamata") { model.refineAllUnrefined() }
+                    .keyboardShortcut("t", modifiers: [.command, .shift]).disabled(model.unrefined.isEmpty)
+                Toggle("Täpsusta automaatselt pärast salvestamist", isOn: $model.autoRefine)
                 Divider()
                 Button("Kinnita / vabasta") { if let d = model.selected { model.togglePin(d) } }
                     .disabled(model.selected == nil)
@@ -105,8 +108,7 @@ struct GeneralSettings: View {
                 ForEach(2...5, id: \.self) { Text("\($0) kõnelejat").tag($0) }
                 Text("Ei erista").tag(0)
             }
-            Toggle("Täpsusta automaatselt pärast salvestamist", isOn: Binding(
-                get: { Settings.autoRefine }, set: { Settings.autoRefine = $0; m.objectWillChange.send() }))
+            Toggle("Täpsusta automaatselt pärast salvestamist", isOn: $m.autoRefine)
             LabeledContent("Mudelite kaust") {
                 Button(Settings.modelsDir) {
                     try? FileManager.default.createDirectory(atPath: Settings.modelsDir, withIntermediateDirectories: true)

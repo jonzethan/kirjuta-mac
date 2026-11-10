@@ -264,7 +264,7 @@ struct DetailView: View {
                             .help("Kogu heli uuesti täpsemalt + kõnelejate eristamine (⌘T). Praegune tekst jääb varuks.")
                     }
                 }
-                Text("kestus \(formatClock(Sessions.durationMs(dir))) · \(Sessions.lang(dir) == "en" ? "inglise" : "eesti") keel · \(segs.count) lõiku")
+                Text("kestus \(formatClock(Sessions.durationMs(dir))) · \(Sessions.lang(dir) == "en" ? "inglise" : "eesti") keel · \(segs.count) lõiku · \(Sessions.isRefined(dir) ? "✓ täpsustatud" : "täpsustamata (kiire tekst)")")
                     .font(K.stamp).foregroundStyle(K.textFaint)
             }
             .padding(.top, 14).padding(.bottom, 18)

@@ -174,8 +174,12 @@ public enum Sessions {
         let f = dir.appendingPathComponent("pinned")
         if on { write(f, "1") } else { try? FileManager.default.removeItem(at: f) }
     }
+    /// Täpsustatud = TÄPSUSTA on tehtud (reaalaja-tekst on varuks segments.live.tsv-s) või see on imporditud fail
+    /// (import kirjutab kohe täpses režiimis; pealkiri = faili nimi). Dikteerimisel on pealkiri, aga tekst on kiire.
     public static func isRefined(_ dir: URL) -> Bool {
-        FileManager.default.fileExists(atPath: dir.appendingPathComponent("segments.live.tsv").path) || title(dir) != nil
+        if FileManager.default.fileExists(atPath: dir.appendingPathComponent("segments.live.tsv").path) { return true }
+        guard let t = title(dir) else { return false }
+        return t != "Dikteerimine"
     }
     /// TÄPSUSTA: reaalajas tehtud tekst jääb varuks (segments.live.tsv), uus tekst kirjutatakse nullist.
     public static func archiveLiveSegments(_ dir: URL) {
