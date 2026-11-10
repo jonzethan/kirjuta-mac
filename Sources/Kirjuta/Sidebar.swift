@@ -353,18 +353,18 @@ struct SearchBox: View {
     }
 }
 
-/// „jonzethan“ neoonsiniselt kumamas (pilt Resources/handle.png, vt scripts/make-handle.swift).
+/// „by jonzethan“ neoonsiniselt kumamas (pilt Resources/handle.png, vt scripts/make-handle.swift).
 struct NeonHandle: View {
     static let image: NSImage? = Bundle.main.url(forResource: "handle", withExtension: "png").flatMap { NSImage(contentsOf: $0) }
-    var height: CGFloat = 24
+    var height: CGFloat = 10
     var body: some View {
         if let img = Self.image {
             Image(nsImage: img).resizable().renderingMode(.template).interpolation(.high)
                 .aspectRatio(contentMode: .fit).frame(height: height)
                 .foregroundStyle(K.accent)
-                .shadow(color: K.accent.opacity(0.9), radius: 4)
-                .shadow(color: K.accent.opacity(0.5), radius: 10)
-                .help("jonzethan")
+                .shadow(color: K.accent.opacity(0.8), radius: 1.5)
+                .shadow(color: K.accent.opacity(0.5), radius: 4)
+                .help("by jonzethan")
         }
     }
 }
