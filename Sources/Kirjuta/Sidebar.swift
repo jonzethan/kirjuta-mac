@@ -249,13 +249,13 @@ struct SessionRow: View {
     }
 }
 
-/// Täpsustamise olek salvestise juures: ✓ TÄPNE = täpsustatud, KIIRE = ainult reaalaja-tekst.
+/// Täpsustamise olek salvestise juures: ✓ TÄPSUSTATUD, KIIRE = ainult reaalaja-tekst.
 struct RefinedBadge: View {
     enum State { case refined, raw, queued, working }
     let state: State
     var body: some View {
         let (t, c): (String, Color) = switch state {
-        case .refined: ("✓ TÄPNE", K.accent)
+        case .refined: ("✓ TÄPSUSTATUD", K.accent)
         case .raw: ("KIIRE", K.textFaint)
         case .queued: ("OOTAB", K.textDim)
         case .working: ("TÖÖS", K.accent)
