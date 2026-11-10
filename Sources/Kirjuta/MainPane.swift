@@ -52,6 +52,8 @@ struct SegmentRow: View {
     var active = false
     var dim = false
     var animate = false
+    var highlight = ""
+    var current = false
     var onTap: (() -> Void)?
     @State private var shown: Int?
     @State private var hover = false
@@ -60,7 +62,7 @@ struct SegmentRow: View {
         HStack(alignment: .firstTextBaseline, spacing: 0) {
             Text(formatClock(seg.startMs)).font(K.stamp).foregroundStyle(active ? K.accent : K.textFaint)
                 .frame(width: 56, alignment: .leading)
-            Text(shown.map { String(seg.text.prefix($0)) } ?? seg.text)
+            Text(shown.map { AttributedString(String(seg.text.prefix($0))) } ?? marked)
                 .font(K.body).lineSpacing(5)
                 .foregroundStyle(dim ? K.textDim : K.text)
                 .italic(dim)
@@ -69,6 +71,7 @@ struct SegmentRow: View {
         }
         .padding(.vertical, 7).padding(.horizontal, 6)
         .background(RoundedRectangle(cornerRadius: 8).fill(active ? K.accent.opacity(0.07) : (hover && onTap != nil ? K.surface.opacity(0.7) : .clear)))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(current ? K.accent.opacity(0.6) : .clear))
         .contentShape(Rectangle())
         .onTapGesture { onTap?() }
         .onHover { hover = $0 }
@@ -83,6 +86,25 @@ struct SegmentRow: View {
             }
             shown = nil
         }
+    }
+}
+
+extension SegmentRow {
+    /// Tekst, kus otsingu vasted on esile tõstetud.
+    var marked: AttributedString {
+        var a = AttributedString(seg.text)
+        let q = highlight.trimmingCharacters(in: .whitespaces)
+        guard !q.isEmpty else { return a }
+        let t = seg.text
+        var r = t.startIndex..<t.endIndex
+        while let f = t.range(of: q, options: AppModel.searchOpts, range: r) {
+            if let lo = AttributedString.Index(f.lowerBound, within: a), let hi = AttributedString.Index(f.upperBound, within: a) {
+                a[lo..<hi].backgroundColor = K.accent.opacity(current ? 0.55 : 0.28)
+                a[lo..<hi].foregroundColor = K.text
+            }
+            r = f.upperBound..<t.endIndex
+        }
+        return a
     }
 }
 
@@ -179,8 +201,16 @@ struct DetailView: View {
     @StateObject private var player = AudioPlayer()
     @State private var renaming: Int?
     @State private var newName = ""
+    @State private var cur = 0
 
     var job: JobState? { m.job?.dir == dir ? m.job : nil }
+
+    /// Lõigud (indeksid), kus otsitav tekst esineb.
+    var matches: [Int] {
+        let q = m.query
+        guard !q.isEmpty else { return [] }
+        return m.segments.indices.filter { m.segments[$0].text.range(of: q, options: AppModel.searchOpts) != nil }
+    }
 
     var body: some View {
         let segs = m.segments
@@ -190,6 +220,14 @@ struct DetailView: View {
                 Text(Export.displayTitle(dir)).label(K.text).lineLimit(1).truncationMode(.middle)
                 if Sessions.isPinned(dir) { Text("▲").font(K.mono(10)).foregroundStyle(K.accent) }
             } trailing: {
+                if !m.query.isEmpty {
+                    let ms = matches
+                    Button { m.stepSearch(-1) } label: { Image(systemName: "chevron.up").foregroundStyle(K.textDim) }
+                        .buttonStyle(.plain).disabled(ms.isEmpty).help("Eelmine vaste (⇧Enter)")
+                    Text(ms.isEmpty ? "0 vastet" : "\(min(cur, ms.count - 1) + 1)/\(ms.count)").font(K.stamp).foregroundStyle(ms.isEmpty ? K.textFaint : K.accent)
+                    Button { m.stepSearch(1) } label: { Image(systemName: "chevron.down").foregroundStyle(K.textDim) }
+                        .buttonStyle(.plain).disabled(ms.isEmpty).help("Järgmine vaste (Enter)").padding(.trailing, 14)
+                }
                 Button { m.showInFinder(dir) } label: { Image(systemName: "folder").foregroundStyle(K.textDim) }
                     .buttonStyle(.plain).help("Näita Finderis")
                 Button { m.delete(dir) } label: { Image(systemName: "trash").foregroundStyle(K.textDim) }
@@ -210,7 +248,10 @@ struct DetailView: View {
                                     newName = m.speakerLabel(s.speaker); renaming = s.speaker
                                 }
                             }
-                            SegmentRow(seg: s, active: s.startMs == active) { player.seek(s.startMs, play: true) }
+                            SegmentRow(seg: s, active: s.startMs == active, highlight: m.query,
+                                       current: !matches.isEmpty && matches[min(cur, matches.count - 1)] == i) {
+                                player.seek(s.startMs, play: true)
+                            }
                                 .id(i)
                         }
                     }
@@ -222,6 +263,15 @@ struct DetailView: View {
                 .allowsHitTesting(job == nil)
                 .overlay { if let job { WorkingCard(job: job).transition(.opacity.combined(with: .scale(scale: 0.96))) } }
                 .animation(.easeInOut(duration: 0.35), value: job != nil)
+                .onChange(of: m.query, initial: true) { _, _ in
+                    cur = 0
+                    if let i = matches.first { proxy.scrollTo(i, anchor: .center) }
+                }
+                .onChange(of: m.searchStep.n) { _, _ in
+                    guard !matches.isEmpty else { return }
+                    cur = (cur + m.searchStep.dir + matches.count) % matches.count
+                    proxy.scrollTo(matches[cur], anchor: .center) // animatsioon võtaks otsingulahtrilt fookuse
+                }
                 .onChange(of: active) { _, a in
                     if player.playing, let i = segs.firstIndex(where: { $0.startMs == a }) {
                         withAnimation { proxy.scrollTo(i, anchor: .center) }

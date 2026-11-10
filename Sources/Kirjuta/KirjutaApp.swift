@@ -49,6 +49,9 @@ struct KirjutaApp: App {
                 Divider()
                 Button("Täpsusta") { model.refineSelected() }
                     .keyboardShortcut("t").disabled(model.selected == nil || model.busy || model.job != nil)
+                Button("Otsi tekstist") { model.searchFocus += 1 }
+                    .keyboardShortcut("f")
+                Divider()
                 Button("Täpsusta kõik täpsustamata") { model.refineAllUnrefined() }
                     .keyboardShortcut("t", modifiers: [.command, .shift]).disabled(model.unrefined.isEmpty)
                 Toggle("Täpsusta automaatselt pärast salvestamist", isOn: $model.autoRefine)

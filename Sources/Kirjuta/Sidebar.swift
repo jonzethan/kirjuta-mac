@@ -17,6 +17,8 @@ struct Sidebar: View {
             .padding(.top, 34).padding(.bottom, 10) // ruum akna nuppudele
 
             HLine()
+            SearchBox()
+            HLine()
             RefineBar()
             HLine()
             if let job = m.job { JobStrip(job: job) }
@@ -155,8 +157,9 @@ struct SessionList: View {
     }()
 
     var body: some View {
-        let pinned = m.sessions.filter(\.pinned)
-        let rest = m.sessions.filter { !$0.pinned }
+        let list = m.filteredSessions
+        let pinned = list.filter(\.pinned)
+        let rest = list.filter { !$0.pinned }
         var days: [(String, [Sessions.Info])] = []
         for s in rest {
             let d = Self.dayFormat.string(from: s.startedAt).uppercased()
@@ -164,6 +167,10 @@ struct SessionList: View {
         }
         return ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
+                if list.isEmpty {
+                    Text("„\(m.query)“ – ei leitud").label(K.textFaint, size: 10, tracking: 1)
+                        .frame(maxWidth: .infinity).padding(.top, 40)
+                }
                 if !pinned.isEmpty {
                     header("▲ KINNITATUD", accent: true)
                     ForEach(pinned, id: \.dir) { SessionRow(info: $0) }
@@ -218,6 +225,10 @@ struct SessionRow: View {
                     }
                 }
                 if !isLive { RefinedBadge(state: refineState) }
+                if !m.query.isEmpty, !isLive {
+                    let n = m.hits(in: info.dir)
+                    Text("\(n) vastet").font(K.mono(9)).foregroundStyle(K.accent)
+                }
                 if info.pinned { Text("▲").font(K.mono(10)).foregroundStyle(K.accent) }
                 if isLive { RecLed(active: m.recording, size: 5) }
             }
@@ -305,5 +316,34 @@ struct RefineBar: View {
             }
         }
         .padding(.horizontal, 18).padding(.vertical, 9)
+    }
+}
+
+/// Otsingulahter (⌘F): filtreerib salvestised teksti järgi; Enter = järgmine vaste, ⇧Enter / ↑ = eelmine, Esc = tühjenda.
+struct SearchBox: View {
+    @EnvironmentObject var m: AppModel
+    @FocusState private var focused: Bool
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass").font(.system(size: 12)).foregroundStyle(focused ? K.accent : K.textFaint)
+            TextField("", text: $m.search, prompt: Text("Otsi tekstist… ⌘F").foregroundStyle(K.textFaint))
+                .textFieldStyle(.plain).font(K.mono(12)).foregroundStyle(K.text)
+                .focused($focused)
+                .onSubmit {
+                    m.stepSearch(NSEvent.modifierFlags.contains(.shift) ? -1 : 1)
+                    DispatchQueue.main.async { focused = true } // Enter lõpetab muidu lahtri muutmise
+                }
+                .onKeyPress(.downArrow) { m.stepSearch(1); return .handled }
+                .onKeyPress(.upArrow) { m.stepSearch(-1); return .handled }
+                .onExitCommand { m.search = ""; focused = false }
+            if !m.search.isEmpty {
+                Button { m.search = "" } label: {
+                    Image(systemName: "xmark.circle.fill").font(.system(size: 12)).foregroundStyle(K.textFaint)
+                }.buttonStyle(.plain).help("Tühjenda (Esc)")
+            }
+        }
+        .padding(.horizontal, 18).padding(.vertical, 9)
+        .background(focused ? K.surface : .clear)
+        .onChange(of: m.searchFocus) { _, _ in focused = true }
     }
 }

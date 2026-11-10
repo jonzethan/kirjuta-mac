@@ -8,6 +8,13 @@ final class AudioPlayer: ObservableObject {
     @Published private(set) var posMs: Int64 = 0
     @Published private(set) var durMs: Int64 = 0
     private var player: AVAudioPlayer?
+    static let rates: [Float] = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]
+    /// Taasesituse kiirus (helikõrgus jääb samaks); meeles kõigi salvestiste jaoks.
+    @Published var rate: Float = {
+        let r = UserDefaults.standard.float(forKey: "playbackRate"); return r > 0 ? r : 1
+    }() {
+        didSet { player?.rate = rate; UserDefaults.standard.set(rate, forKey: "playbackRate") }
+    }
     private var url: URL?
     private var timer: Timer?
 
@@ -23,7 +30,9 @@ final class AudioPlayer: ObservableObject {
     private func ensure() -> AVAudioPlayer? {
         if let p = player { return p }
         guard let url, let p = try? AVAudioPlayer(contentsOf: url) else { return nil }
+        p.enableRate = true
         p.prepareToPlay()
+        p.rate = rate
         durMs = Int64(p.duration * 1000)
         player = p
         return p
@@ -64,6 +73,12 @@ final class AudioPlayer: ObservableObject {
     }
 }
 
+extension AudioPlayer {
+    static func label(_ r: Float) -> String {
+        (r == r.rounded() ? String(format: "%.0f", r) : String(format: "%g", r)).replacingOccurrences(of: ".", with: ",") + "×"
+    }
+}
+
 struct PlayerBar: View {
     @ObservedObject var player: AudioPlayer
     @State private var dragging: Double?
@@ -91,6 +106,20 @@ struct PlayerBar: View {
             })
             .tint(K.accent)
             Text(formatClock(player.durMs)).font(K.stamp).foregroundStyle(K.textFaint)
+            Menu {
+                ForEach(AudioPlayer.rates, id: \.self) { r in
+                    Button { player.rate = r } label: {
+                        Text((r == player.rate ? "✓ " : "   ") + AudioPlayer.label(r))
+                    }
+                }
+            } label: {
+                Text(AudioPlayer.label(player.rate)).label(player.rate == 1 ? K.textDim : K.accent, tracking: 1)
+            }
+            .menuStyle(.button).menuIndicator(.hidden).buttonStyle(.plain)
+            .padding(.horizontal, 8).padding(.vertical, 5)
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(player.rate == 1 ? K.line : K.accent.opacity(0.5)))
+            .fixedSize()
+            .help("Taasesituse kiirus")
         }
     }
 }

@@ -115,7 +115,51 @@ final class AppModel: ObservableObject {
     func refreshSessions() {
         let current = busy ? liveDir : nil
         sessions = Sessions.list().map { Sessions.info($0) }.filter { $0.dir != current || busy }
+        var idx: [URL: String] = [:]
+        for s in sessions { idx[s.dir] = (s.title ?? "") + "\n" + Sessions.loadSegments(s.dir).map(\.text).joined(separator: "\n") }
+        textIndex = idx
     }
+
+    // MARK: otsing
+
+    /// Otsingu tekst: filtreerib nimekirja ja tõstab avatud salvestises vasted esile.
+    @Published var search = "" {
+        didSet {
+            // avatud salvestises vasteid pole -> ava esimene leitud
+            guard !query.isEmpty, !isLiveSelected else { return }
+            if let sel = selected, hits(in: sel) > 0 { return }
+            if let first = filteredSessions.first(where: { !($0.dir == liveDir && busy) }) { selected = first.dir }
+        }
+    }
+    /// ⌘F – otsingulahter fookusesse.
+    @Published var searchFocus = 0
+    /// Enter / nool – järgmine (+1) või eelmine (-1) vaste avatud salvestises.
+    @Published var searchStep = (n: 0, dir: 1)
+    private var textIndex: [URL: String] = [:]
+    static let searchOpts: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
+
+    var query: String { search.trimmingCharacters(in: .whitespaces) }
+
+    var filteredSessions: [Sessions.Info] {
+        let q = query
+        guard !q.isEmpty else { return sessions }
+        return sessions.filter { ($0.dir == liveDir && busy) || hits(in: $0.dir) > 0 }
+    }
+
+    /// Vastete arv salvestises.
+    func hits(in dir: URL) -> Int {
+        let q = query
+        guard !q.isEmpty, let t = textIndex[dir] else { return 0 }
+        return Self.count(q, in: t)
+    }
+
+    static func count(_ q: String, in t: String) -> Int {
+        var n = 0, r = t.startIndex..<t.endIndex
+        while let f = t.range(of: q, options: searchOpts, range: r) { n += 1; r = f.upperBound..<t.endIndex }
+        return n
+    }
+
+    func stepSearch(_ d: Int) { searchStep = (searchStep.n + 1, d) }
 
     func loadSelected() {
         guard let dir = selected else { segments = []; speakerNames = [:]; return }
