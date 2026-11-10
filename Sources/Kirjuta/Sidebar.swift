@@ -8,8 +8,13 @@ struct Sidebar: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 6) {
-                RecLed(active: m.recording)
-                Text("KIRJUTA").font(K.mono(13, .medium)).tracking(5).foregroundStyle(K.text)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        RecLed(active: m.recording)
+                        Text("KIRJUTA").font(K.mono(13, .medium)).tracking(5).foregroundStyle(K.text)
+                    }
+                    NeonHandle().padding(.leading, 2)
+                }
                 Spacer()
                 if !m.busy && m.job == nil { Chip(title: "+ HELIFAIL") { m.pickAudioFile() } }
             }
@@ -345,5 +350,21 @@ struct SearchBox: View {
         .padding(.horizontal, 18).padding(.vertical, 9)
         .background(focused ? K.surface : .clear)
         .onChange(of: m.searchFocus) { _, _ in focused = true }
+    }
+}
+
+/// „jonzethan“ neoonsiniselt kumamas (pilt Resources/handle.png, vt scripts/make-handle.swift).
+struct NeonHandle: View {
+    static let image: NSImage? = Bundle.main.url(forResource: "handle", withExtension: "png").flatMap { NSImage(contentsOf: $0) }
+    var height: CGFloat = 24
+    var body: some View {
+        if let img = Self.image {
+            Image(nsImage: img).resizable().renderingMode(.template).interpolation(.high)
+                .aspectRatio(contentMode: .fit).frame(height: height)
+                .foregroundStyle(K.accent)
+                .shadow(color: K.accent.opacity(0.9), radius: 4)
+                .shadow(color: K.accent.opacity(0.5), radius: 10)
+                .help("jonzethan")
+        }
     }
 }

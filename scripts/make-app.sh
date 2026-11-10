@@ -9,7 +9,7 @@ rm -rf $APP
 mkdir -p $APP/Contents/MacOS $APP/Contents/Resources
 cp .build/release/Kirjuta $APP/Contents/MacOS/
 cp Resources/Info.plist $APP/Contents/
-cp Resources/AppIcon.icns $APP/Contents/Resources/
+cp Resources/AppIcon.icns Resources/handle.png $APP/Contents/Resources/
 # KIRJUTA_BUNDLE_MODELS=1: mudelid äpi sisse (jagamiseks, vt make-dmg.sh)
 if [[ "$KIRJUTA_BUNDLE_MODELS" == 1 ]]; then
   mkdir -p $APP/Contents/Resources/models $APP/Contents/Resources/diar/sherpa-onnx-pyannote-segmentation-3-0

@@ -256,12 +256,28 @@ struct MenuBarMenu: View {
 struct RootView: View {
     @EnvironmentObject var m: AppModel
     @State private var dropTarget = false
+    /// Vasaku paani laius (lohistatav eraldusriba), jääb meelde.
+    @AppStorage("sidebarWidth") private var sidebarWidth: Double = 330
+    @State private var dragStart: Double?
+
+    static let minSidebar = 260.0, minMain = 420.0
 
     var body: some View {
-        HStack(spacing: 0) {
-            Sidebar().frame(width: 330)
-            Rectangle().fill(K.line).frame(width: 1)
-            MainPane()
+        GeometryReader { g in
+            let maxW = max(Self.minSidebar, g.size.width - Self.minMain)
+            let w = min(max(sidebarWidth, Self.minSidebar), maxW)
+            HStack(spacing: 0) {
+                Sidebar().frame(width: w)
+                SplitHandle()
+                    .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                        .onChanged { v in
+                            if dragStart == nil { dragStart = w }
+                            sidebarWidth = min(max(dragStart! + v.translation.width, Self.minSidebar), maxW)
+                        }
+                        .onEnded { _ in dragStart = nil })
+                    .onTapGesture(count: 2) { sidebarWidth = 330 }
+                MainPane()
+            }
         }
         .background(K.bg)
         .ignoresSafeArea()
@@ -284,5 +300,24 @@ struct RootView: View {
                 .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(K.accent.opacity(0.6), style: StrokeStyle(lineWidth: 1.5, dash: [6, 5])).padding(10))
             }
         }
+    }
+}
+
+/// Eraldusriba vasaku ja parema paani vahel: lohista laiust muutma, topeltklõps = vaikimisi laius.
+struct SplitHandle: View {
+    @State private var hover = false
+    var body: some View {
+        Rectangle().fill(hover ? K.accent.opacity(0.6) : K.line)
+            .frame(width: hover ? 2 : 1)
+            .padding(.horizontal, 3)          // laiem haaratav ala
+            .contentShape(Rectangle())
+            .padding(.horizontal, -3)
+            .onHover { h in
+                hover = h
+                if h { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+            }
+            .animation(.easeOut(duration: 0.12), value: hover)
+            .help("Lohista laiuse muutmiseks · topeltklõps = tagasi vaikimisi")
+            .zIndex(1)
     }
 }
