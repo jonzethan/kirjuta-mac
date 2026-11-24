@@ -15,11 +15,12 @@ Nõuded: **Apple Silicon** (M1 või uuem), **macOS 14.2+**, soovitatavalt 16 GB 
 
 ## Paigaldamine
 
-1. Lae [Releases](../../releases) lehelt `Kirjuta-…-ilma-mudeliteta.dmg`, ava see ja lohista **Kirjuta** kausta
-   **Applications**.
+1. Lae [Releases](../../releases) lehelt üks kahest, ava see ja lohista **Kirjuta** kausta **Applications**:
+   - `Kirjuta-….dmg` (~850 MB) – **koos mudeliga**, töötab kohe (punkt 3 jääb vahele);
+   - `Kirjuta-…-ilma-mudeliteta.dmg` (~10 MB) – ainult äpp, mudelid lae ise (punkt 3).
 2. Esimene avamine: **paremklõps → Ava → Ava** (äpp on allkirjastatud isetehtud sertifikaadiga, mitte Apple'i omaga;
    kui „Ava“ nuppu pole: Süsteemiseaded → Privaatsus ja turvalisus → „Ava ikkagi“).
-3. Pane mudelid kausta `~/Kirjuta/models` (vt allpool) ja käivita Kirjuta uuesti.
+3. (Ainult „ilma-mudeliteta“ puhul) pane mudelid kausta `~/Kirjuta/models` (vt allpool) ja käivita Kirjuta uuesti.
 4. Luba **mikrofon**; dikteerimiseks ka **Süsteemiseaded → Privaatsus ja turvalisus → Hõlbustus → Kirjuta**.
 
 ## Mudelid
