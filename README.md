@@ -15,9 +15,13 @@ Nõuded: **Apple Silicon** (M1 või uuem), **macOS 14.2+**, soovitatavalt 16 GB 
 
 ## Paigaldamine
 
-1. Lae [Releases](../../releases) lehelt üks kahest, ava see ja lohista **Kirjuta** kausta **Applications**:
-   - `Kirjuta-….dmg` (~850 MB) – **koos mudeliga**, töötab kohe (punkt 3 jääb vahele);
-   - `Kirjuta-…-ilma-mudeliteta.dmg` (~10 MB) – ainult äpp, mudelid lae ise (punkt 3).
+**Kõige lihtsam:** lae [Releases](../../releases) lehelt **`Kirjuta-….dmg`** (~850 MB, mudel on juba sees). Ava see,
+lohista **Kirjuta** kausta **Applications** ja ongi valmis – midagi juurde laadima ei pea (punkt 3 jääb vahele).
+
+Natuke keerulisem: `Kirjuta-…-ilma-mudeliteta.dmg` (~10 MB) on ainult äpp ja mudelid tuleb eraldi alla laadida
+(punkt 3). Sobib, kui tahad väiksemat allalaadimist või teist mudelit (f16, q5_0).
+
+1. Ava allalaaditud `.dmg` ja lohista **Kirjuta** kausta **Applications**.
 2. Esimene avamine: **paremklõps → Ava → Ava** (äpp on allkirjastatud isetehtud sertifikaadiga, mitte Apple'i omaga;
    kui „Ava“ nuppu pole: Süsteemiseaded → Privaatsus ja turvalisus → „Ava ikkagi“).
 3. (Ainult „ilma-mudeliteta“ puhul) pane mudelid kausta `~/Kirjuta/models` (vt allpool) ja käivita Kirjuta uuesti.
